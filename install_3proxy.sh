@@ -63,20 +63,44 @@ chroot /usr/local/3proxy proxy proxy
 include /conf/3proxy.cfg
 EOF
 
+# Detect available memory and adjust configuration
+MEMORY_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}' 2>/dev/null || echo "1048576")
+MEMORY_MB=$((MEMORY_KB / 1024))
+
+if [ $MEMORY_MB -lt 512 ]; then
+    # Low memory configuration
+    NSCACHE=1024
+    log "Low memory detected (${MEMORY_MB}MB) - using minimal configuration"
+elif [ $MEMORY_MB -lt 1024 ]; then
+    # Medium memory configuration  
+    NSCACHE=8192
+    log "Medium memory detected (${MEMORY_MB}MB) - using optimized configuration"
+else
+    # High memory configuration
+    NSCACHE=32768
+    log "Sufficient memory detected (${MEMORY_MB}MB) - using standard configuration"
+fi
+
 # Detailed config with ELITE ANONYMOUS settings
-cat > /usr/local/3proxy/conf/3proxy.cfg << 'EOF'
-nscache 65536
+cat > /usr/local/3proxy/conf/3proxy.cfg << EOF
+# Memory-optimized configuration for ${MEMORY_MB}MB system
+nscache $NSCACHE
 nserver 8.8.8.8
+nserver 8.8.4.4
 log /logs/3proxy-%y%m%d.log D
-rotate 30
-users $/conf/passwd
+rotate 7
+maxconn 256
+users \$/conf/passwd
 auth strong
 deny * * 127.0.0.1
 allow *
+# Elite Anonymous HTTP Proxy
 proxy -a1 -n -p3128
+# SOCKS5 Proxy
 socks -p1080
 flush
 allow *
+# Web Admin Interface
 admin -p8080
 EOF
 
@@ -180,17 +204,93 @@ EOF
         
     "container"|"manual")
         log "Container/Manual mode - Starting 3proxy directly..."
-        # Create startup script
+        # Create startup script with error handling
         cat > /usr/local/bin/start-3proxy.sh << 'EOF'
 #!/bin/bash
-# 3proxy startup script for containers
-cd /usr/local/3proxy
-exec /usr/local/bin/3proxy /etc/3proxy/3proxy.cfg
+# 3proxy startup script for containers with error handling
+
+LOG_FILE="/tmp/3proxy.log"
+CONFIG_FILE="/etc/3proxy/3proxy.cfg"
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+start_3proxy() {
+    echo "$(date): Starting 3proxy..." >> "$LOG_FILE"
+    cd /usr/local/3proxy
+    exec /usr/local/bin/3proxy "$CONFIG_FILE"
+}
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "$(date): ERROR - Config file not found: $CONFIG_FILE" >> "$LOG_FILE"
+    exit 1
+fi
+
+# Test configuration syntax
+if ! /usr/local/bin/3proxy "$CONFIG_FILE" -t 2>/dev/null; then
+    echo "$(date): ERROR - Configuration test failed" >> "$LOG_FILE"
+    exit 1
+fi
+
+# Start with retry mechanism
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    start_3proxy
+    EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 137 ]; then
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        echo "$(date): Exit code 137 detected (attempt $RETRY_COUNT/$MAX_RETRIES)" >> "$LOG_FILE"
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "$(date): Waiting 5 seconds before retry..." >> "$LOG_FILE"
+            sleep 5
+        fi
+    else
+        break
+    fi
+done
+
+echo "$(date): 3proxy exited with code $EXIT_CODE after $RETRY_COUNT retries" >> "$LOG_FILE"
+exit $EXIT_CODE
 EOF
         chmod +x /usr/local/bin/start-3proxy.sh
         
-        # Start in background
-        nohup /usr/local/bin/start-3proxy.sh > /tmp/3proxy.log 2>&1 &
+        # Test configuration before starting
+        log "Testing configuration..."
+        if ! /usr/local/bin/3proxy /etc/3proxy/3proxy.cfg -t 2>/dev/null; then
+            error "Configuration test failed"
+        fi
+        
+        # Try starting with timeout to detect immediate failures
+        log "Starting 3proxy with monitoring..."
+        timeout 10s /usr/local/bin/start-3proxy.sh > /tmp/3proxy.log 2>&1 &
+        PROXY_PID=$!
+        
+        # Wait a moment and check if it's still running
+        sleep 3
+        if ! kill -0 $PROXY_PID 2>/dev/null; then
+            log "Initial start failed, trying direct start..."
+            # Fallback: try starting without chroot for containers
+            cat > /usr/local/3proxy/conf/3proxy-simple.cfg << EOF
+# Simplified container configuration
+nscache 512
+nserver 8.8.8.8
+log /tmp/3proxy.log D
+rotate 3
+maxconn 128
+users /usr/local/3proxy/conf/passwd
+auth strong
+allow *
+# Elite Anonymous HTTP Proxy
+proxy -a1 -n -p3128
+# SOCKS5 Proxy  
+socks -p1080
+flush
+allow *
+# Web Admin Interface
+admin -p8080
+EOF
+            nohup /usr/local/bin/3proxy /usr/local/3proxy/conf/3proxy-simple.cfg > /tmp/3proxy-simple.log 2>&1 &
+        fi
         
         echo
         echo "📋 Container Management Commands:"
@@ -198,16 +298,28 @@ EOF
         echo "  Stop:    pkill -f 3proxy"
         echo "  Status:  pgrep -f 3proxy"
         echo "  Logs:    tail -f /tmp/3proxy.log"
+        echo "  Simple:  nohup /usr/local/bin/3proxy /usr/local/3proxy/conf/3proxy-simple.cfg > /tmp/3proxy-simple.log 2>&1 &"
         ;;
 esac
 
-# Wait and verify
-sleep 2
+# Wait and verify with enhanced checking
+sleep 3
+PROXY_RUNNING=0
+
+# Try multiple ways to detect running 3proxy
 if pgrep -f "3proxy" >/dev/null; then
+    PROXY_RUNNING=1
+elif netstat -tlpn 2>/dev/null | grep -q ":3128\|:1080\|:8080"; then
+    PROXY_RUNNING=1
+elif ss -tlpn 2>/dev/null | grep -q ":3128\|:1080\|:8080"; then
+    PROXY_RUNNING=1
+fi
+
+if [ $PROXY_RUNNING -eq 1 ]; then
     log "✅ 3proxy Elite Anonymous Proxy installed successfully!"
     echo
     echo "🌐 Proxy Configuration:"
-    echo "  HTTP:  YOUR_SERVER_IP:3128"
+    echo "  HTTP:  YOUR_SERVER_IP:3128"  
     echo "  SOCKS: YOUR_SERVER_IP:1080"
     echo "  Admin: YOUR_SERVER_IP:8080"
     echo
@@ -219,9 +331,20 @@ if pgrep -f "3proxy" >/dev/null; then
     echo "  ✅ High Anonymous (-a1)"
     echo "  ✅ No HTTP_VIA header"
     echo "  ✅ No X-Forwarded headers"
+    echo "  ✅ Memory optimized for ${MEMORY_MB}MB system"
     echo
-    echo "📋 Usage:"
+    echo "📋 Usage Examples:"
     echo "  curl -x ${PROXY_USER}:${PROXY_PASS}@YOUR_IP:3128 http://httpbin.org/ip"
+    echo "  curl --socks5 ${PROXY_USER}:${PROXY_PASS}@YOUR_IP:1080 http://httpbin.org/ip"
+    echo
+    # Show active ports
+    echo "🔍 Active Ports:"
+    netstat -tlpn 2>/dev/null | grep -E ":3128|:1080|:8080" | head -3 || \
+    ss -tlpn 2>/dev/null | grep -E ":3128|:1080|:8080" | head -3 || \
+    echo "  Port detection unavailable"
 else
-    error "Installation failed - 3proxy not running"
+    error "Installation completed but 3proxy is not running. Check logs:
+    - Main log: tail -f /tmp/3proxy.log
+    - Simple log: tail -f /tmp/3proxy-simple.log  
+    - Try manual start: /usr/local/bin/3proxy /usr/local/3proxy/conf/3proxy-simple.cfg"
 fi
