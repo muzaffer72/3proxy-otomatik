@@ -88,8 +88,26 @@ touch /usr/local/3proxy/conf/{counters,bandlimiters}
 chown -R proxy:proxy /usr/local/3proxy /var/run/3proxy
 chmod 600 /usr/local/3proxy/conf/passwd
 
-log "Creating systemd service..."
-cat > /etc/systemd/system/3proxy.service << 'EOF'
+# Detect init system and start service
+detect_init_system() {
+    if [ -f /.dockerenv ] || [ -f /proc/1/cgroup ] && grep -q docker /proc/1/cgroup; then
+        echo "container"
+    elif command -v systemctl >/dev/null 2>&1 && systemctl --version >/dev/null 2>&1; then
+        echo "systemd"
+    elif [ -d /etc/init.d ]; then
+        echo "sysv"
+    else
+        echo "manual"
+    fi
+}
+
+INIT_SYSTEM=$(detect_init_system)
+log "Detected init system: $INIT_SYSTEM"
+
+case "$INIT_SYSTEM" in
+    "systemd")
+        log "Creating systemd service..."
+        cat > /etc/systemd/system/3proxy.service << 'EOF'
 [Unit]
 Description=3proxy Elite Anonymous Proxy
 After=network.target
@@ -104,10 +122,84 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl daemon-reload
+        systemctl enable 3proxy
+        systemctl start 3proxy
+        ;;
+        
+    "sysv")
+        log "Creating SysV init script..."
+        cat > /etc/init.d/3proxy << 'EOF'
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          3proxy
+# Required-Start:    $network $local_fs
+# Required-Stop:     $network $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Description:       3proxy proxy server
+### END INIT INFO
 
-systemctl daemon-reload
-systemctl enable 3proxy
-systemctl start 3proxy
+DAEMON=/usr/local/bin/3proxy
+CONFIG=/etc/3proxy/3proxy.cfg
+PIDFILE=/var/run/3proxy/3proxy.pid
+
+case "$1" in
+    start)
+        echo "Starting 3proxy..."
+        $DAEMON $CONFIG
+        ;;
+    stop)
+        echo "Stopping 3proxy..."
+        if [ -f $PIDFILE ]; then
+            kill $(cat $PIDFILE)
+            rm -f $PIDFILE
+        fi
+        ;;
+    restart)
+        $0 stop
+        sleep 2
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+EOF
+        chmod +x /etc/init.d/3proxy
+        /etc/init.d/3proxy start
+        # Try to add to startup
+        if command -v update-rc.d >/dev/null 2>&1; then
+            update-rc.d 3proxy defaults
+        elif command -v chkconfig >/dev/null 2>&1; then
+            chkconfig --add 3proxy
+            chkconfig 3proxy on
+        fi
+        ;;
+        
+    "container"|"manual")
+        log "Container/Manual mode - Starting 3proxy directly..."
+        # Create startup script
+        cat > /usr/local/bin/start-3proxy.sh << 'EOF'
+#!/bin/bash
+# 3proxy startup script for containers
+cd /usr/local/3proxy
+exec /usr/local/bin/3proxy /etc/3proxy/3proxy.cfg
+EOF
+        chmod +x /usr/local/bin/start-3proxy.sh
+        
+        # Start in background
+        nohup /usr/local/bin/start-3proxy.sh > /tmp/3proxy.log 2>&1 &
+        
+        echo
+        echo "📋 Container Management Commands:"
+        echo "  Start:   nohup /usr/local/bin/start-3proxy.sh > /tmp/3proxy.log 2>&1 &"
+        echo "  Stop:    pkill -f 3proxy"
+        echo "  Status:  pgrep -f 3proxy"
+        echo "  Logs:    tail -f /tmp/3proxy.log"
+        ;;
+esac
 
 # Wait and verify
 sleep 2
