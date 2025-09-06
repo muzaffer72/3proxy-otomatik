@@ -2,7 +2,7 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.2
+# Version: 2.3
 
 set -e
 
@@ -13,7 +13,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.2"
+VERSION="2.3"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
@@ -162,6 +162,51 @@ test_proxy() {
     fi
 }
 
+test_proxy_speed() {
+    local proxy_line="$1"
+    local expected_ip="$2"
+    
+    # Parse proxy format: ip:port:username:password or ip:port (for public)
+    local ip=$(echo "$proxy_line" | cut -d':' -f1)
+    local port=$(echo "$proxy_line" | cut -d':' -f2)
+    local username=$(echo "$proxy_line" | cut -d':' -f3)
+    local password=$(echo "$proxy_line" | cut -d':' -f4)
+    
+    # Test with passo.com.tr for speed
+    local start_time=$(date +%s%3N)
+    local test_result
+    
+    if [[ -n "$username" ]] && [[ -n "$password" ]] && [[ "$username" != "$password" ]]; then
+        # Authenticated proxy
+        test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$username:$password@$ip:$port" https://passo.com.tr 2>/dev/null)
+    else
+        # Public proxy (no authentication)
+        test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$ip:$port" https://passo.com.tr 2>/dev/null)
+    fi
+    
+    local end_time=$(date +%s%3N)
+    local total_time=$((end_time - start_time))
+    
+    if [[ $? -eq 0 ]] && [[ -n "$test_result" ]]; then
+        local http_code=$(echo "$test_result" | tail -1 | cut -d'|' -f1)
+        local curl_time=$(echo "$test_result" | tail -1 | cut -d'|' -f2)
+        
+        # Convert curl time to milliseconds
+        local ms_time=$(echo "scale=0; $curl_time * 1000" | bc -l 2>/dev/null || echo "$total_time")
+        
+        if [[ "$http_code" -eq 200 ]] || [[ "$http_code" -eq 301 ]] || [[ "$http_code" -eq 302 ]]; then
+            echo "$ms_time|ÇALIŞIYOR"
+            return 0
+        else
+            echo "$total_time|HTTP_ERROR_$http_code"
+            return 1
+        fi
+    else
+        echo "$total_time|TIMEOUT"
+        return 2
+    fi
+}
+
 validate_proxy_list() {
     local proxy_file="$1"
     local show_details="${2:-true}"
@@ -245,6 +290,102 @@ validate_proxy_list() {
     
     # Return success rate as percentage
     echo $(( success_count * 100 / tested_count ))
+}
+
+test_proxy_speeds() {
+    local proxy_file="$1"
+    
+    if [[ ! -f "$proxy_file" ]]; then
+        error "Proxy dosyası bulunamadı: $proxy_file"
+        return 1
+    fi
+    
+    # Check if bc is installed for calculations
+    if ! command -v bc >/dev/null; then
+        log "bc yükleniyor..."
+        apt update -qq && apt install -y bc
+    fi
+    
+    local total_proxies=$(wc -l < "$proxy_file")
+    local tested_count=0
+    local working_count=0
+    local timeout_count=0
+    local error_count=0
+    
+    print_header
+    echo -e "${CYAN}🚀 PROXY HIZ TESTİ - PASSO.COM.TR${NC}"
+    echo "=============================================="
+    echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
+    echo -e "${WHITE}Test Sitesi: ${BLUE}https://passo.com.tr${NC}"
+    echo
+    echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
+    echo
+    printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
+    echo "------------------------------------------------------------"
+    
+    while IFS= read -r proxy_line; do
+        if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]]; then
+            continue
+        fi
+        
+        ((tested_count++))
+        local expected_ip=$(echo "$proxy_line" | cut -d':' -f1)
+        local port=$(echo "$proxy_line" | cut -d':' -f2)
+        
+        printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
+        
+        if speed_result=$(test_proxy_speed "$proxy_line" "$expected_ip" 2>&1); then
+            local ms_time=$(echo "$speed_result" | cut -d'|' -f1)
+            local status=$(echo "$speed_result" | cut -d'|' -f2)
+            
+            if [[ "$status" == "ÇALIŞIYOR" ]]; then
+                ((working_count++))
+                if [[ $ms_time -lt 1000 ]]; then
+                    printf "${GREEN}%-8s ${GREEN}%-15s${NC}\n" "${ms_time}ms" "$status"
+                elif [[ $ms_time -lt 3000 ]]; then
+                    printf "${YELLOW}%-8s ${YELLOW}%-15s${NC}\n" "${ms_time}ms" "$status"
+                else
+                    printf "${RED}%-8s ${YELLOW}%-15s${NC}\n" "${ms_time}ms" "$status"
+                fi
+            else
+                ((error_count++))
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "${ms_time}ms" "$status"
+            fi
+        else
+            local result_code=$?
+            if [[ $result_code -eq 2 ]]; then
+                ((timeout_count++))
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "TIMEOUT" "BAĞLANAMADI"
+            else
+                ((error_count++))
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "ERROR" "BAŞARISIZ"
+            fi
+        fi
+        
+        # Progress indicator every 10 tests
+        if (( tested_count % 10 == 0 )); then
+            echo -e "${BLUE}[İlerleme: $tested_count/$total_proxies]${NC}"
+        fi
+        
+    done < "$proxy_file"
+    
+    echo
+    echo "=============================================="
+    echo -e "${CYAN}📊 HIZ TESTİ SONUÇLARI${NC}"
+    echo "=============================================="
+    echo -e "${GREEN}✅ Çalışan: $working_count${NC}"
+    echo -e "${RED}❌ Hatalı: $error_count${NC}"
+    echo -e "${YELLOW}⏱️  Timeout: $timeout_count${NC}"
+    echo -e "${WHITE}📈 Başarı Oranı: $(( working_count * 100 / tested_count ))%${NC}"
+    
+    if [[ $working_count -gt 0 ]]; then
+        echo -e "${WHITE}🏆 En İyi Performans: ${GREEN}< 1000ms${NC}"
+        echo -e "${WHITE}⚡ Orta Performans: ${YELLOW}1000-3000ms${NC}"
+        echo -e "${WHITE}🐌 Yavaş Performans: ${RED}> 3000ms${NC}"
+    fi
+    
+    echo
+    read -p "Devam etmek için Enter'a basın..."
 }
 
 # Check prerequisites
@@ -1899,6 +2040,95 @@ manage_configs() {
     read -p "Press Enter to continue..."
 }
 
+reinstall_server() {
+    print_header
+    echo -e "${RED}🔄 SUNUCU YENİDEN KURULUM${NC}"
+    echo "============================================"
+    echo
+    echo -e "${YELLOW}⚠️  UYARI: Bu işlem sunucuyu tamamen yeniden kuracaktır!${NC}"
+    echo -e "${RED}⚠️  TÜM VERİLER SİLİNECEKTİR!${NC}"
+    echo
+    echo -e "${WHITE}Yeniden Kurulum Bilgileri:${NC}"
+    echo -e "• İşletim Sistemi: ${GREEN}Ubuntu 20.04${NC}"
+    echo -e "• Kurulum Script: ${BLUE}bin456789/reinstall${NC}"
+    echo -e "• Sunucu yeniden başlatılacak${NC}"
+    echo
+    
+    read -p "Bu işlemi gerçekten yapmak istiyor musunuz? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy] ]]; then
+        info "İşlem iptal edildi"
+        return 0
+    fi
+    
+    echo
+    echo -e "${CYAN}🔐 Root şifresi belirleme${NC}"
+    echo "================================"
+    echo -e "${WHITE}Yeni sunucu için root şifresi girin:${NC}"
+    
+    while true; do
+        read -s -p "Root şifresi: " user_password
+        echo
+        if [[ ${#user_password} -lt 6 ]]; then
+            error "Şifre en az 6 karakter olmalıdır"
+            continue
+        fi
+        
+        read -s -p "Şifreyi tekrar girin: " user_password2
+        echo
+        
+        if [[ "$user_password" != "$user_password2" ]]; then
+            error "Şifreler eşleşmiyor"
+            continue
+        fi
+        
+        break
+    done
+    
+    success "Şifre belirlendi"
+    echo
+    
+    echo -e "${YELLOW}⚠️  SON UYARI: 10 saniye içinde sunucu yeniden kurulumu başlayacak!${NC}"
+    echo -e "${RED}Bu işlem GERİ ALINAMAZ!${NC}"
+    echo
+    
+    for i in {10..1}; do
+        echo -ne "\rGeri sayım: ${RED}$i${NC} saniye... (Durdurmak için Ctrl+C)"
+        sleep 1
+    done
+    echo
+    echo
+    
+    log "Sunucu yeniden kurulum başlatılıyor..."
+    echo -e "${CYAN}📥 Kurulum script'i indiriliyor...${NC}"
+    
+    # Download reinstall script
+    if command -v wget >/dev/null; then
+        wget -O /tmp/reinstall.sh https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh
+    elif command -v curl >/dev/null; then
+        curl -sL https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh -o /tmp/reinstall.sh
+    else
+        error "wget veya curl bulunamadı"
+        return 1
+    fi
+    
+    if [[ ! -f "/tmp/reinstall.sh" ]]; then
+        error "Kurulum script'i indirilemedi"
+        return 1
+    fi
+    
+    chmod +x /tmp/reinstall.sh
+    
+    echo -e "${GREEN}✅ Script indirildi${NC}"
+    echo -e "${YELLOW}🚀 Ubuntu 20.04 kurulumu başlatılıyor...${NC}"
+    echo
+    echo -e "${RED}SUNUCU ŞİMDİ YENİDEN BAŞLATILACAK!${NC}"
+    echo
+    
+    # Run reinstall command
+    log "Reinstall komutu çalıştırılıyor: bash /tmp/reinstall.sh ubuntu 20.04 --passwd ****"
+    bash /tmp/reinstall.sh ubuntu 20.04 --passwd "$user_password" && reboot
+}
+
 uninstall_3proxy() {
     print_header
     echo -e "${RED}3PROXY KALDIRMA${NC}"
@@ -2074,7 +2304,9 @@ show_main_menu() {
     echo -e "${CYAN}17.${NC} Log Görüntüle"
     echo -e "${CYAN}18.${NC} Konfigürasyon Yönetimi"
     echo -e "${CYAN}19.${NC} Proxy'leri Doğrula"
-    echo -e "${CYAN}20.${NC} 3proxy Kaldır"
+    echo -e "${CYAN}20.${NC} Proxy Hız Testi (passo.com.tr)"
+    echo -e "${CYAN}21.${NC} Sunucu Yeniden Kur"
+    echo -e "${CYAN}22.${NC} 3proxy Kaldır"
     echo -e "${CYAN} 0.${NC} Çıkış"
     echo
     echo -e "${WHITE}Ubuntu 20.04+ | v$VERSION | $(date)${NC}"
@@ -2088,7 +2320,7 @@ main() {
     
     while true; do
         show_main_menu
-        read -p "Seçiminiz [0-20]: " choice
+        read -p "Seçiminiz [0-22]: " choice
         
         case $choice in
             1) install_3proxy ;;
@@ -2110,7 +2342,9 @@ main() {
             17) view_logs ;;
             18) manage_configs ;;
             19) validate_proxy_list "$PROXY_LIST_FILE" ;;
-            20) uninstall_3proxy ;;
+            20) test_proxy_speeds "$PROXY_LIST_FILE" ;;
+            21) reinstall_server ;;
+            22) uninstall_3proxy ;;
             0) 
                 print_header
                 echo -e "${GREEN}3proxy Elite Manager'dan çıkılıyor...${NC}"

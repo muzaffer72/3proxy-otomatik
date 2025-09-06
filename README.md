@@ -1,6 +1,6 @@
-# 3proxy Elite Manager v2.2
+# 3proxy Elite Manager v2.3
 
-**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Tek Dosya + Proxy Doğrulama**
+**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Hız Testi + Sunucu Yeniden Kurulum**
 
 Bu script, Ubuntu 20.04+ işletim sistemlerinde çalışan kapsamlı bir 3proxy yönetim sistemidir. Sınırsız proxy oluşturma, çoklu mod desteği ve gelişmiş yönetim özellikleri sunar. Artık tüm sistem tek dosyada!
 
@@ -95,7 +95,9 @@ sudo /opt/3proxy-elite/3proxy_menu.sh
 17. Log Görüntüle
 18. Konfigürasyon Yönetimi
 19. Proxy'leri Doğrula               # YENİ: Otomatik proxy testleri
-20. 3proxy Kaldır
+20. Proxy Hız Testi (passo.com.tr)  # YENİ: Türkiye hız testi
+21. Sunucu Yeniden Kur               # YENİ: Ubuntu 20.04 reinstall
+22. 3proxy Kaldır
 ```
 
 ### 🆕 Gelişmiş Özellikler
@@ -112,6 +114,20 @@ sudo /opt/3proxy-elite/3proxy_menu.sh
 - **Detaylı Rapor** - Başarı/başarısızlık oranları ve detaylar
 - **Çoklu Format** - Authenticated ve public proxy testleri
 - **Timeout Koruması** - 10 saniye timeout ile hızlı tespit
+
+#### **🚀 Proxy Hız Testi (YENİ)**
+- **Türkiye Test Sunucusu** - `passo.com.tr` ile gerçek hız ölçümü
+- **Milisaniye Hassasiyeti** - Precise timing measurement
+- **Renkli Performans Gösterimi** - Yeşil/Sarı/Kırmızı hız kategorileri
+- **Detaylı Hız Raporu** - Her proxy için ayrı ms değeri
+- **Performans Kategorileri** - <1000ms Hızlı, 1000-3000ms Orta, >3000ms Yavaş
+
+#### **🔄 Sunucu Yeniden Kurulum (YENİ)**
+- **Tam Sistem Reinstall** - Ubuntu 20.04 fresh installation
+- **Güvenli Şifre Belirleme** - Root password encryption
+- **Otomatik Script İndirme** - bin456789/reinstall integration
+- **10 Saniye Geri Sayım** - Son şans cancellation
+- **Otomatik Reboot** - Seamless server restart
 
 #### **🎯 Akıllı Subnet Tespiti**
 Netplan dosyalarından subnet bilgisini otomatik tespit eder:
