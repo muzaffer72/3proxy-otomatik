@@ -1,13 +1,25 @@
-# Test Proxy Listesi - Yeni Format: USER:PASS@IP:PORT
-user1001:abc123xyz456@192.168.1.10:3128
-user1002:def789uvw123@192.168.1.11:3128
-user1003:ghi456rst789@192.168.1.10:3129
-user1004:jkl123mno456@192.168.1.12:3128
+# Test Proxy Listesi - Yeni Format: USER:PASS@IP:PORT (Subnet bilgisi temizlenmiş)
 
-# Public proxy format: IP:PORT
-192.168.1.13:3128
-192.168.1.14:3129
+# Fixed Mode Example (1 IP = 1 Proxy, sequential ports)
+# 6 IP = 6 proxy with ports 10000-10005
+onvaonet:onvaonet@176.100.36.39:10000
+onvaonet:onvaonet@176.100.36.44:10001  
+onvaonet:onvaonet@45.90.98.32:10002
+onvaonet:onvaonet@45.90.98.33:10003
+onvaonet:onvaonet@45.90.98.34:10004
+onvaonet:onvaonet@45.90.98.35:10005
+
+# Random Mode Example (multiple proxies per IP, starting from 3128)
+# user1001:randompass@176.100.36.39:3128
+# user1002:randompass@176.100.36.44:3128
+# user1003:randompass@45.90.98.32:3128
+# user1004:randompass@176.100.36.39:3129
+# user1005:randompass@176.100.36.44:3129
+
+# Public proxy format: IP:PORT (Sequential or per-IP based on mode)
+176.100.36.40:3129
+45.90.98.36:3129
 
 # Legacy format (still supported): IP:PORT:USER:PASS
-192.168.1.15:3128:user1005:legacy123
-192.168.1.16:3129:user1006:legacy456
+176.100.36.41:3130:onvaonet:onvaonet
+45.90.98.37:3130:onvaonet:onvaonet

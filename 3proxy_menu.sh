@@ -2,15 +2,9 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.4
+# Version: 2.6
 
 set -e
-
-# Check for install parameter
-if [[ "$1" == "--install" ]]; then
-    install_system
-    exit 0
-fi
 
 # Configuration
 VERSION="2.6"
@@ -36,7 +30,7 @@ install_system() {
     clear
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    ${GREEN}3PROXY ELITE MANAGER${BLUE}                         ║${NC}"
-    echo -e "${BLUE}║                      ${YELLOW}System Installer${BLUE}                         ║${NC}"
+    echo -e "${BLUE}║                    ${YELLOW}Global Command Setup${BLUE}                        ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
 
@@ -46,38 +40,41 @@ install_system() {
         exit 1
     fi
 
-    # Check system
-    if ! grep -q "Ubuntu" /etc/os-release 2>/dev/null; then
-        echo -e "${YELLOW}⚠️  Bu script Ubuntu 20.04+ için optimize edilmiştir${NC}"
-        read -p "Devam etmek istiyor musunuz? [y/N]: " continue_install
-        if [[ ! "$continue_install" =~ ^[Yy] ]]; then
-            exit 0
-        fi
-    fi
+    echo -e "${GREEN}[$(date +'%H:%M:%S')] Global menu komutları oluşturuluyor...${NC}"
+    echo
 
-    echo -e "${GREEN}[$(date +'%H:%M:%S')] 3proxy Elite Manager yükleniyor...${NC}"
-
-    # Create installation directory
+    # Create installation directory for permanent storage
     install_dir="/opt/3proxy-elite"
     mkdir -p "$install_dir"
     
     # Copy current script to installation directory
-    cp "$0" "$install_dir/3proxy_menu.sh"
+    current_script="$(readlink -f "$0")"
+    cp "$current_script" "$install_dir/3proxy_menu.sh"
     chmod +x "$install_dir/3proxy_menu.sh"
 
-    # Create global commands with proper permissions
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
+    # Create global commands pointing to permanent location
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-menu
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-menu
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-manager
     
-    # Ensure symlinks are executable
-    chmod +x /usr/local/bin/menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
-    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
-
-    echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
+    # Verify installation
+    if command -v menu >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Global komutlar başarıyla oluşturuldu!${NC}"
+        echo
+        echo -e "${CYAN}🚀 Kullanabileceğiniz komutlar:${NC}"
+        echo -e "   ${BLUE}menu${NC}               # Ana menu (herhangi bir dizinden)"
+        echo -e "   ${BLUE}3proxy-menu${NC}        # Proxy menu sistemi" 
+        echo -e "   ${BLUE}proxy-manager${NC}      # Proxy yöneticisi"
+        echo
+        echo -e "${YELLOW}📋 Not: Tam kurulum için menüden '3proxy Kur' seçeneğini kullanın${NC}"
+        echo -e "${WHITE}Başlamak için: ${GREEN}menu${NC}"
+        echo
+        exit 0
+    else
+        echo -e "${RED}❌ Global komut oluşturma başarısız${NC}"
+        exit 1
+    fi
+}
     echo
     echo -e "${CYAN}🔗 Test global komutları:${NC}"
     echo -e "   ${WHITE}which menu${NC} - Komut konumunu kontrol et"
@@ -145,25 +142,25 @@ test_proxy() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # Parse different proxy formats
+    # Parse different proxy formats (support subnet notation)
     local ip port username password
     
-    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
-        # Format: USER:PASS@IP:PORT
+    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
         username="${BASH_REMATCH[1]}"
         password="${BASH_REMATCH[2]}"
-        ip="${BASH_REMATCH[3]}"
-        port="${BASH_REMATCH[4]}"
-    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
-        # Format: IP:PORT:USER:PASS (legacy)
-        ip="${BASH_REMATCH[1]}"
-        port="${BASH_REMATCH[2]}"
-        username="${BASH_REMATCH[3]}"
-        password="${BASH_REMATCH[4]}"
-    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
-        # Format: IP:PORT (public proxy)
-        ip="${BASH_REMATCH[1]}"
-        port="${BASH_REMATCH[2]}"
+        ip="${BASH_REMATCH[3]}"  # IP without subnet
+        port="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+        # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
+        username="${BASH_REMATCH[4]}"
+        password="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
         username=""
         password=""
     else
@@ -236,25 +233,25 @@ test_proxy_speed() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # Parse different proxy formats
+    # Parse different proxy formats (support subnet notation)
     local ip port username password
     
-    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
-        # Format: USER:PASS@IP:PORT
+    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
         username="${BASH_REMATCH[1]}"
         password="${BASH_REMATCH[2]}"
-        ip="${BASH_REMATCH[3]}"
-        port="${BASH_REMATCH[4]}"
-    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
-        # Format: IP:PORT:USER:PASS (legacy)
-        ip="${BASH_REMATCH[1]}"
-        port="${BASH_REMATCH[2]}"
-        username="${BASH_REMATCH[3]}"
-        password="${BASH_REMATCH[4]}"
-    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
-        # Format: IP:PORT (public proxy)
-        ip="${BASH_REMATCH[1]}"
-        port="${BASH_REMATCH[2]}"
+        ip="${BASH_REMATCH[3]}"  # IP without subnet
+        port="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+        # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
+        username="${BASH_REMATCH[4]}"
+        password="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
         username=""
         password=""
     else
@@ -351,30 +348,31 @@ validate_proxy_list() {
         
         ((tested_count++))
         
-        # Parse different proxy formats
+        # Parse different proxy formats (support subnet notation)
         local expected_ip port username password
         
-        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
-            # Format: USER:PASS@IP:PORT
+        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+            # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
             username="${BASH_REMATCH[1]}"
             password="${BASH_REMATCH[2]}"
-            expected_ip="${BASH_REMATCH[3]}"
-            port="${BASH_REMATCH[4]}"
-        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
-            # Format: IP:PORT:USER:PASS (legacy)
-            expected_ip="${BASH_REMATCH[1]}"
-            port="${BASH_REMATCH[2]}"
-            username="${BASH_REMATCH[3]}"
-            password="${BASH_REMATCH[4]}"
-        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
-            # Format: IP:PORT (public proxy)
-            expected_ip="${BASH_REMATCH[1]}"
-            port="${BASH_REMATCH[2]}"
+            expected_ip="${BASH_REMATCH[3]}"  # IP without subnet
+            port="${BASH_REMATCH[5]}"
+        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+            # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
+            expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
+            port="${BASH_REMATCH[3]}"
+            username="${BASH_REMATCH[4]}"
+            password="${BASH_REMATCH[5]}"
+        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+            # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
+            expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
+            port="${BASH_REMATCH[3]}"
             username=""
             password=""
         else
             if [[ "$show_details" == "true" ]]; then
-                printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "UNKNOWN" "N/A"
+                printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "PARSE_ERROR" "N/A"
+                echo -e "${GRAY}         └─ Desteklenmeyen format: $proxy_line${NC}"
             fi
             ((failed_count++))
             continue
@@ -602,28 +600,38 @@ download_3proxy() {
     log "3proxy kaynak kodu indiriliyor..."
     cd "${TEMP_DIR}"
     
+    # Clean any existing directory
     if [ -d "3proxy-0.9.3" ]; then
         rm -rf "3proxy-0.9.3"
     fi
     
+    # Download 3proxy source
     wget -q "https://github.com/3proxy/3proxy/archive/0.9.3.tar.gz" || {
         error "3proxy indirilemiyor"
         return 1
     }
     
-    tar -xzf "0.9.3.tar.gz"
-    cd "3proxy-0.9.3"
+    # Extract source
+    tar -xzf "0.9.3.tar.gz" || {
+        error "3proxy arşivi açılmıyor"
+        return 1
+    }
+    
+    cd "3proxy-0.9.3" || {
+        error "3proxy dizini bulunamadı"
+        return 1
+    }
     
     # Enable anonymous proxy support
     echo '#define ANONYMOUS 1' >> src/proxy.h
     
-    # Compile
-    make -f Makefile.Linux || {
-        error "Derleme başarısız"
+    # Compile with error handling
+    if make -f Makefile.Linux; then
+        success "3proxy başarıyla derlendi"
+    else
+        error "Derleme başarısız - Makefile.Linux bulunamadı veya compile hatası"
         return 1
-    }
-    
-    success "3proxy başarıyla derlendi"
+    fi
 }
 
 install_3proxy() {
@@ -655,17 +663,43 @@ install_3proxy() {
     
     log "3proxy kuruluyor..."
     
-    # Create directories
+    # Create directories with proper structure
     mkdir -p /usr/local/3proxy/{bin,conf,logs,count}
     mkdir -p "${CONFIG_DIR}" /var/run/3proxy
     
-    # Copy binaries
-    cd "${TEMP_DIR}/3proxy-0.9.3"
-    cp bin/* /usr/local/3proxy/bin/
-    ln -sf /usr/local/3proxy/bin/3proxy /usr/local/bin/3proxy
+    # Ensure we're in the correct directory
+    if [[ ! -d "${TEMP_DIR}/3proxy-0.9.3/bin" ]]; then
+        error "3proxy binary dizini bulunamadı: ${TEMP_DIR}/3proxy-0.9.3/bin"
+        return 1
+    fi
+    
+    # Copy binaries with verification
+    cd "${TEMP_DIR}/3proxy-0.9.3" || {
+        error "3proxy kaynak dizinine girilemiyor"
+        return 1
+    }
+    
+    if [[ -f "bin/3proxy" ]]; then
+        cp bin/* /usr/local/3proxy/bin/ || {
+            error "Binary dosyalar kopyalanmadı"
+            return 1
+        }
+        
+        # Create symlink to system binary path
+        ln -sf /usr/local/3proxy/bin/3proxy /usr/local/bin/3proxy
+        success "3proxy binary kuruldu"
+    else
+        error "3proxy binary bulunamadı - derleme başarısız olabilir"
+        return 1
+    fi
     
     # Create user
-    id proxy >/dev/null 2>&1 || useradd -r -s /bin/false proxy
+    if ! id proxy >/dev/null 2>&1; then
+        useradd -r -s /bin/false proxy || {
+            error "Proxy kullanıcısı oluşturulamadı"
+            return 1
+        }
+    fi
     
     # Create systemd service
     create_systemd_service
@@ -673,30 +707,65 @@ install_3proxy() {
     # Set permissions
     chown -R proxy:proxy /usr/local/3proxy /var/run/3proxy
     
-    # Create global menu commands
+    # Create global menu commands for system-wide access
     current_script_path=$(realpath "$0")
     
+    log "Global menu komutları oluşturuluyor..."
+    
     # Ensure script is executable
-    chmod +x "$current_script_path"
+    chmod +x "$current_script_path" || {
+        error "Script executable yapılamadı"
+        return 1
+    }
     
-    # Create symlinks with proper permissions
-    ln -sf "$current_script_path" /usr/local/bin/menu 2>/dev/null || true
-    ln -sf "$current_script_path" /usr/local/bin/3proxy 2>/dev/null || true  
-    ln -sf "$current_script_path" /usr/local/bin/proxy-menu 2>/dev/null || true
-    ln -sf "$current_script_path" /usr/local/bin/3proxy-manager 2>/dev/null || true
+    # Create a permanent installation directory
+    install_dir="/opt/3proxy-menu"
+    mkdir -p "$install_dir"
     
-    # Make symlinks executable
-    chmod +x /usr/local/bin/menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
-    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
+    # Copy script to permanent location
+    cp "$current_script_path" "$install_dir/3proxy_menu.sh" || {
+        error "Script kopyalanmadı"
+        return 1
+    }
+    chmod +x "$install_dir/3proxy_menu.sh"
     
-    success "3proxy başarıyla kuruldu"
-    echo -e "${CYAN}💡 Global komutlar oluşturuldu:${NC}"
-    echo -e "   ${BLUE}menu${NC} - Herhangi bir yerden menüyü aç"
-    echo -e "   ${BLUE}3proxy${NC} - Ana komut"
-    echo -e "   ${BLUE}proxy-menu${NC} - Alternatif komut"
-    echo -e "   ${BLUE}3proxy-manager${NC} - Manager komutu"
+    # Create global symlinks pointing to permanent location
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu || {
+        warning "Menu komutu oluşturulamadı"
+    }
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-menu || {
+        warning "3proxy-menu komutu oluşturulamadı" 
+    }
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-manager || {
+        warning "Proxy-manager komutu oluşturulamadı"
+    }
+    
+    # Verify symlinks are working
+    if command -v menu >/dev/null 2>&1; then
+        success "Menu komutu başarıyla oluşturuldu: 'menu' komutunu kullanabilirsiniz"
+    else
+        warning "Menu komutu oluşturulamadı - manuel kurulum gerekebilir"
+    fi
+    
+    success "3proxy Elite Manager başarıyla kuruldu!"
+    echo
+    echo -e "${CYAN}🎯 KURULUM TAMAMLANDI${NC}"
+    echo "=========================="
+    echo -e "${GREEN}✅ 3proxy servisi kuruldu ve etkinleştirildi${NC}"
+    echo -e "${GREEN}✅ Global komutlar oluşturuldu${NC}"
+    echo -e "${GREEN}✅ Menu sistemi hazır${NC}"
+    echo
+    echo -e "${BLUE}🔧 Kullanabileceğiniz komutlar:${NC}"
+    echo -e "   ${WHITE}menu${NC}               # Ana menu (herhangi bir dizinden)"
+    echo -e "   ${WHITE}3proxy-menu${NC}        # Proxy menu sistemi"
+    echo -e "   ${WHITE}proxy-manager${NC}      # Proxy yöneticisi"
+    echo
+    echo -e "${YELLOW}📋 Kurulum sonrası yapılacaklar:${NC}"
+    echo -e "   1. ${WHITE}menu${NC} komutunu çalıştırın"
+    echo -e "   2. IP listesi oluşturun (otomatik olarak istenecek)"
+    echo -e "   3. Proxy tipini seçin ve oluşturun"
+    echo
+    echo -e "${GREEN}🚀 Başlamak için: ${WHITE}menu${NC}"
     echo
     read -p "Press Enter to continue..."
 }
@@ -1348,7 +1417,7 @@ create_proxy_random() {
         return 1
     fi
     
-    # Read IPs
+    # Read IPs and clean subnet information for proxy usage (Random mode)
     mapfile -t ips < "$PROXY_LIST_FILE"
     total_ips=${#ips[@]}
     
@@ -1357,8 +1426,17 @@ create_proxy_random() {
         return 1
     fi
     
+    # Clean IPs - remove subnet information for proxy configuration
+    declare -a clean_ips
+    for i in "${!ips[@]}"; do
+        # Remove subnet part (/24, /23, etc.) - keep only IP address
+        clean_ip=$(echo "${ips[$i]}" | cut -d'/' -f1 | tr -d '\r\n ')
+        clean_ips[$i]="$clean_ip"
+    done
+    
     log "Toplam IP sayısı: $total_ips"
     log "Port aralığı: $start_port-$end_port"
+    log "IP'ler subnet bilgisi temizlenerek proxy konfigürasyonunda kullanılacak"
     
     # Generate config
     config_file="${CONFIG_DIR}/3proxy.cfg"
@@ -1536,7 +1614,7 @@ create_proxy_fixed() {
         return 1
     fi
     
-    # Read IPs
+    # Read IPs and clean subnet information for proxy usage (Fixed mode)
     mapfile -t ips < "$PROXY_LIST_FILE"
     total_ips=${#ips[@]}
     
@@ -1545,8 +1623,24 @@ create_proxy_fixed() {
         return 1
     fi
     
+    # Clean IPs - remove subnet information for proxy configuration
+    declare -a clean_ips
+    for i in "${!ips[@]}"; do
+        # Remove subnet part (/24, /23, etc.) - keep only IP address
+        clean_ip=$(echo "${ips[$i]}" | cut -d'/' -f1 | tr -d '\r\n ')
+        clean_ips[$i]="$clean_ip"
+    done
+    
     log "Toplam IP sayısı: $total_ips"
-    log "Port aralığı: $start_port-$end_port"
+    log "FIXED MOD: Her IP için 1 proxy oluşturulacak (Sequential port assignment)"
+    log "IP'ler subnet bilgisi temizlenerek proxy konfigürasyonunda kullanılacak"
+    
+    # FIXED MODE: 1 IP = 1 Proxy, Sequential ports starting from 3128
+    # Ignore user port range, use IP count for sequential assignment
+    local fixed_start_port=3128
+    local total_proxies_fixed=$total_ips  # Only as many proxies as IPs
+    
+    log "Fixed mode port ataması: $fixed_start_port'den başlayarak $total_proxies_fixed proxy"
     
     # Generate config
     config_file="${CONFIG_DIR}/3proxy.cfg"
@@ -1565,71 +1659,54 @@ create_proxy_fixed() {
     echo "auth strong" >> "$config_file"
     echo "" >> "$config_file"
     
-    # Create proxies with automatic port assignment per IP
-    # Each IP starts from port 3128 and increments +1 for each additional proxy on that IP
-    local ip_port_map=()
-    
-    # Initialize starting ports for each IP (3128)
+    # Fixed mode: Each IP gets exactly one proxy with sequential port (3128, 3129, 3130, ...)
     for (( i=0; i<total_ips; i++ )); do
-        ip_port_map[i]=3128
-    done
-    
-    port="$start_port"
-    ip_index=0
-    
-    while [ "$port" -le "$end_port" ]; do
-        # Get IP (round-robin)
-        current_ip="${ips[$ip_index]}"
+        # Get cleaned IP (without subnet)
+        current_ip="${clean_ips[$i]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
-        # Get the current port for this IP and increment it for next use
-        current_port=${ip_port_map[$ip_index]}
-        ip_port_map[$ip_index]=$((current_port + 1))
+        # Assign sequential port starting from 3128
+        assigned_port=$((fixed_start_port + i))
         
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "socks -i$current_ip -p$current_port" >> "$config_file"
+            echo "socks -i$current_ip -p$assigned_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            # Format: USER:PASS@IP:PORT
-            echo "$fixed_user:$fixed_pass@$current_ip:$current_port" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT (clean format without subnet)
+            echo "$fixed_user:$fixed_pass@$current_ip:$assigned_port" >> "$proxy_list_file"
         else
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$assigned_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            # Format: USER:PASS@IP:PORT
-            echo "$fixed_user:$fixed_pass@$current_ip:$current_port" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT (clean format without subnet)
+            echo "$fixed_user:$fixed_pass@$current_ip:$assigned_port" >> "$proxy_list_file"
         fi
         
-        port=$((port + 1))
-        ip_index=$(((ip_index + 1) % total_ips))
+        log "IP $((i+1))/$total_ips: $current_ip → Port $assigned_port"
     done
     
     # Set permissions
     chmod 600 "$users_file"
     chown proxy:proxy "$users_file"
     
-    # Open firewall ports with dynamic port calculation for fixed proxy
-    # Calculate real port range based on 3128 start + proxy count per IP
-    local total_proxy_count=$((end_port - start_port + 1))
-    local ports_per_ip=$((total_proxy_count / total_ips))
-    if [[ $((total_proxy_count % total_ips)) -gt 0 ]]; then
-        ports_per_ip=$((ports_per_ip + 1))
-    fi
-    local actual_end_port=$((3128 + ports_per_ip - 1))
+    # Open firewall ports for Fixed mode (sequential port assignment: 3128 to 3128+IP_count-1)
+    local actual_end_port=$((fixed_start_port + total_ips - 1))
     
-    # Open firewall for the actual port range used (3128 to calculated end)
-    open_firewall_ports "3128" "$actual_end_port" "tcp"
+    # Open firewall for the actual port range used
+    open_firewall_ports "$fixed_start_port" "$actual_end_port" "tcp"
     
     # Create zip file
     create_proxy_zip "$proxy_list_file" "fixed"
     
-    success "Sabit mod proxy'ler oluşturuldu"
-    success "Toplam proxy sayısı: $((end_port - start_port + 1))"
+    success "FIXED MODE: 1 IP = 1 Proxy (Sequential Port Assignment)"
+    success "Toplam proxy sayısı: $total_ips"
+    success "Port aralığı: $fixed_start_port-$actual_end_port"
+    success "Mapping: IP1→3128, IP2→3129, IP3→3130, ..."
     success "Proxy listesi: $proxy_list_file"
     
     read -p "Proxy'leri başlatmak istiyor musunuz? [y/n]: " start_now
@@ -1710,7 +1787,7 @@ create_proxy_public() {
         return 1
     fi
     
-    # Read IPs
+    # Read IPs and clean subnet information for proxy usage (Public mode)
     mapfile -t ips < "$PROXY_LIST_FILE"
     total_ips=${#ips[@]}
     
@@ -1719,7 +1796,17 @@ create_proxy_public() {
         return 1
     fi
     
+    # Clean IPs - remove subnet information for proxy configuration
+    declare -a clean_ips
+    for i in "${!ips[@]}"; do
+        # Remove subnet part (/24, /23, etc.) - keep only IP address
+        clean_ip=$(echo "${ips[$i]}" | cut -d'/' -f1 | tr -d '\r\n ')
+        clean_ips[$i]="$clean_ip"
+    done
+    
     log "Toplam IP sayısı: $total_ips"
+    log "Port aralığı: $start_port-$end_port"
+    log "IP'ler subnet bilgisi temizlenerek proxy konfigürasyonunda kullanılacak"
     log "Port aralığı: $start_port-$end_port"
     
     # Generate config
@@ -1748,8 +1835,8 @@ create_proxy_public() {
     ip_index=0
     
     while [ "$port" -le "$end_port" ]; do
-        # Get IP (round-robin)
-        current_ip="${ips[$ip_index]}"
+        # Get IP (round-robin) - use cleaned IP without subnet for Public mode
+        current_ip="${clean_ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
         # Get the current port for this IP and increment it for next use
@@ -1846,7 +1933,7 @@ create_proxy_maximum() {
     read -p "HTTP (h) veya SOCKS5 (s) [h/s]: " proxy_type
     read -p "Rastgele (r), Sabit (f), Public (p) mod [r/f/p]: " auth_mode
     
-    # Read IPs
+    # Read IPs and clean subnet information for proxy usage (Maximum mode)
     mapfile -t ips < "$PROXY_LIST_FILE"
     total_ips=${#ips[@]}
     
@@ -1854,6 +1941,14 @@ create_proxy_maximum() {
         error "IP listesi boş"
         return 1
     fi
+    
+    # Clean IPs - remove subnet information for proxy configuration
+    declare -a clean_ips
+    for i in "${!ips[@]}"; do
+        # Remove subnet part (/24, /23, etc.) - keep only IP address
+        clean_ip=$(echo "${ips[$i]}" | cut -d'/' -f1 | tr -d '\r\n ')
+        clean_ips[$i]="$clean_ip"
+    done
     
     # Auto-calculate optimal port range
     port_range=$(calculate_port_range "$total_ips" 3 10000)
@@ -1927,8 +2022,8 @@ create_proxy_maximum() {
     proxy_per_ip=0
     
     while [ "$port" -le "$end_port" ]; do
-        # Get IP (3 proxies per IP)
-        current_ip="${ips[$ip_index]}"
+        # Get IP (3 proxies per IP) - use cleaned IP without subnet for Maximum mode
+        current_ip="${clean_ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
         # Get the current port for this IP and increment it for next use
@@ -2908,4 +3003,8 @@ main() {
 }
 
 # Start the script
-main "$@"
+if [[ "$1" == "--install" ]]; then
+    install_system
+else
+    main "$@"
+fi
