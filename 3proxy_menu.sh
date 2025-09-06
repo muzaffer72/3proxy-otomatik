@@ -118,8 +118,8 @@ install_system() {
 print_header() {
     clear
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║                    ${WHITE}3PROXY ELITE MANAGER v${VERSION}${CYAN}                    ║${NC}"
-    echo -e "${CYAN}║                    ${YELLOW}Ubuntu 20.04+ Compatible${CYAN}                     ║${NC}"
+    echo -e "${CYAN}║                    ${WHITE}Onvao.net 3Proxy Elite Anonim Proxy Yönetimi v${VERSION}${CYAN}                    ║${NC}"
+    echo -e "${CYAN}║                    ${YELLOW}Ubuntu 20.04+ ile test edildi.${CYAN}                     ║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
 }
@@ -238,6 +238,42 @@ test_proxy() {
             return 1
             ;;
     esac
+}
+
+# Mevcut proxy listesini göster
+show_proxy_content() {
+    clear
+    echo -e "${GREEN}=================================="
+    echo -e " Mevcut Proxy Listesi"
+    echo -e "==================================${NC}\n"
+    
+    if [ -f "$PROXY_LIST_FILE" ] && [ -s "$PROXY_LIST_FILE" ]; then
+        echo -e "${CYAN}Proxy Listesi ($PROXY_LIST_FILE):${NC}\n"
+        echo -e "${WHITE}$(cat "$PROXY_LIST_FILE")${NC}\n"
+        
+        # Proxy sayısını göster
+        local proxy_count=$(wc -l < "$PROXY_LIST_FILE" 2>/dev/null || echo "0")
+        echo -e "${YELLOW}Toplam Proxy Sayısı: $proxy_count${NC}\n"
+        
+        # 3proxy config dosyasını da göster
+        if [ -f "/etc/3proxy/3proxy.cfg" ]; then
+            echo -e "${CYAN}3proxy Konfigürasyon Dosyası (/etc/3proxy/3proxy.cfg):${NC}\n"
+            echo -e "${WHITE}$(cat /etc/3proxy/3proxy.cfg)${NC}\n"
+        fi
+        
+        # Servis durumu
+        if systemctl is-active --quiet 3proxy; then
+            echo -e "${GREEN}✓ 3proxy servisi çalışıyor${NC}"
+        else
+            echo -e "${RED}✗ 3proxy servisi durmuş${NC}"
+        fi
+    else
+        echo -e "${RED}Proxy listesi bulunamadı veya boş${NC}"
+        echo -e "${YELLOW}Önce 'Sabit (Fixed) Proxy Modu' ile proxy listesi oluşturun${NC}"
+    fi
+    
+    echo -e "\n${CYAN}Ana menüye dönmek için herhangi bir tuşa basın...${NC}"
+    read -n 1
 }
 
 test_proxy_speed() {
@@ -3030,7 +3066,7 @@ show_main_menu() {
     echo
     
     echo -e "${CYAN} 1.${NC} İlk Kurulum (3proxy ve bağımlılıklar)"
-    echo -e "${CYAN} 2.${NC} Proxy Listesi Oluştur/Düzenle"
+    echo -e "${CYAN} 2.${NC} Mevcut Proxy Listesini Göster"
     echo -e "${CYAN} 3.${NC} Proxy Listesini Sil"
     # echo -e "${CYAN} 4.${NC} Rastgele Mod Proxy Oluştur"           # GİZLENDİ
     echo -e "${CYAN} 5.${NC} Sabit Mod Proxy Oluştur"
@@ -3068,7 +3104,7 @@ main() {
         
         case $choice in
             1) install_3proxy ;;
-            2) setup_proxy_list ;;
+            2) show_proxy_content ;;
             3) delete_proxy_list ;;
             4) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             5) create_proxy_fixed ;;
