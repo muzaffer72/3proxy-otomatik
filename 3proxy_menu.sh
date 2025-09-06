@@ -257,6 +257,10 @@ test_proxy_speed() {
         port="${BASH_REMATCH[3]}"
         username=""
         password=""
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?$ ]]; then
+        # Format: IP/SUBNET only (IP list, not proxy list) - Skip testing
+        echo "0|IP_LIST_FORMAT"
+        return 3
     else
         echo "0|FORMAT_ERROR"
         return 1
@@ -461,6 +465,14 @@ test_proxy_speeds() {
         apt update -qq && apt install -y bc
     fi
     
+    # Check file format - detect if it's IP list or Proxy list
+    local first_line=$(head -1 "$proxy_file")
+    local is_ip_list=false
+    
+    if [[ "$first_line" =~ ^([^:/]+)(/[0-9]+)?$ ]] && [[ ! "$first_line" =~ : ]]; then
+        is_ip_list=true
+    fi
+
     local total_proxies=$(wc -l < "$proxy_file")
     local tested_count=0
     local working_count=0
@@ -473,14 +485,18 @@ test_proxy_speeds() {
     echo -e "${WHITE}Proxy Dosyası: ${BLUE}$proxy_file${NC}"
     echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
     echo -e "${WHITE}Test Sitesi: ${BLUE}https://passo.com.tr${NC}"
+    
+    if [[ "$is_ip_list" == "true" ]]; then
+        echo -e "${YELLOW}⚠️  UYARI: Bu bir IP listesi, Proxy listesi değil!${NC}"
+        echo -e "${WHITE}IP formatı tespit edildi: $first_line${NC}"
+        echo -e "${GRAY}Proxy testleri için önce Fixed/Random modla proxy oluşturun${NC}"
+    fi
     echo
     
     # Show first few proxies for debugging
     echo -e "${GRAY}İlk 3 proxy örneği:${NC}"
     head -3 "$proxy_file" | nl
-    echo
-    
-    echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
+    echo    echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
     echo
     printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
     echo "------------------------------------------------------------"
@@ -495,18 +511,22 @@ test_proxy_speeds() {
         # Parse different proxy formats to extract IP and port for display
         local expected_ip port
         
-        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
-            # Format: USER:PASS@IP:PORT
+        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+            # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
             expected_ip="${BASH_REMATCH[3]}"
-            port="${BASH_REMATCH[4]}"
-        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
-            # Format: IP:PORT:USER:PASS (legacy)
+            port="${BASH_REMATCH[5]}"
+        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+            # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
             expected_ip="${BASH_REMATCH[1]}"
-            port="${BASH_REMATCH[2]}"
-        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
-            # Format: IP:PORT (public proxy)
+            port="${BASH_REMATCH[3]}"
+        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+            # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
             expected_ip="${BASH_REMATCH[1]}"
-            port="${BASH_REMATCH[2]}"
+            port="${BASH_REMATCH[3]}"
+        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?$ ]]; then
+            # Format: IP/SUBNET only (IP list, not proxy list)
+            expected_ip="${BASH_REMATCH[1]}"
+            port="IP-LIST"
         else
             expected_ip="UNKNOWN"
             port="N/A"
@@ -533,7 +553,10 @@ test_proxy_speeds() {
             fi
         else
             local result_code=$?
-            if [[ $result_code -eq 2 ]]; then
+            if [[ $result_code -eq 3 ]]; then
+                # IP list format detected - show as skipped
+                printf "${YELLOW}%-8s ${YELLOW}%-15s${NC}\n" "SKIP" "IP-LİSTE-FORMAT"
+            elif [[ $result_code -eq 2 ]]; then
                 ((timeout_count++))
                 printf "${RED}%-8s ${RED}%-15s${NC}\n" "TIMEOUT" "BAĞLANAMADI"
             else
