@@ -2,7 +2,7 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.3
+# Version: 2.3.1
 
 set -e
 
@@ -13,7 +13,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.3"
+VERSION="2.3.1"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
@@ -734,16 +734,69 @@ configure_netplan() {
             log "  ✅ $ip_to_add eklendi (otomatik tespit edilen subnet)"
         fi
         
-        # Find the line with 'addresses:' and add IPs after existing ones
+        # Safer approach: Add IP with proper YAML indentation detection
         if grep -q "addresses:" "$temp_yaml"; then
-            sed -i "/addresses:/a\\                - $ip_to_add" "$temp_yaml"
+            # Use Python to safely add IP to YAML file
+            python3 -c "
+import yaml
+import sys
+
+yaml_file = '$temp_yaml'
+ip_to_add = '$ip_to_add'
+
+try:
+    with open(yaml_file, 'r') as f:
+        data = yaml.safe_load(f)
+    
+    # Navigate to network configuration
+    if 'network' in data and 'ethernets' in data['network']:
+        for interface in data['network']['ethernets'].values():
+            if 'addresses' in interface:
+                if ip_to_add not in interface['addresses']:
+                    interface['addresses'].append(ip_to_add)
+                break
+    
+    # Write back to file with proper formatting
+    with open(yaml_file, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    
+    print('IP_ADDED_SUCCESS')
+except Exception as e:
+    print(f'IP_ADD_ERROR: {e}')
+" 2>&1
+            local add_result=$?
+            
+            if [[ $add_result -eq 0 ]]; then
+                log "  ✅ $ip_to_add Python ile güvenli şekilde eklendi"
+            else
+                # Fallback to sed method with better indentation detection
+                local indent_line=$(grep -n "addresses:" "$temp_yaml" | head -1 | cut -d: -f1)
+                local next_line=$((indent_line + 1))
+                local existing_indent=$(sed -n "${next_line}p" "$temp_yaml" | sed 's/[^[:space:]].*//' 2>/dev/null || echo "        ")
+                
+                sed -i "/addresses:/a\\${existing_indent}- $ip_to_add" "$temp_yaml"
+                log "  ✅ $ip_to_add sed ile eklendi (fallback method)"
+            fi
         else
             warning "  ❌ addresses section bulunamadı: $ip_to_add"
         fi
     done
     
-    # Validate YAML syntax
-    if python3 -c "import yaml; yaml.safe_load(open('$temp_yaml'))" 2>/dev/null; then
+    # Enhanced YAML validation with error reporting
+    yaml_error=$(python3 -c "
+import yaml
+import sys
+try:
+    with open('$temp_yaml', 'r') as f:
+        yaml.safe_load(f)
+    print('YAML_VALID')
+except yaml.YAMLError as e:
+    print(f'YAML_ERROR: {e}')
+except Exception as e:
+    print(f'GENERAL_ERROR: {e}')
+" 2>&1)
+    
+    if [[ "$yaml_error" == "YAML_VALID" ]]; then
         # Apply the changes
         cp "$temp_yaml" "$primary_yaml"
         success "Netplan konfigürasyonu güncellendi"
@@ -759,7 +812,13 @@ configure_netplan() {
             return 1
         fi
     else
-        error "YAML syntax hatası, değişiklikler uygulanamadı"
+        error "YAML syntax hatası tespit edildi:"
+        echo -e "${RED}$yaml_error${NC}"
+        error "Değişiklikler uygulanamadı, orijinal dosya korundu"
+        echo -e "${YELLOW}💡 Manuel düzenleme önerisi:${NC}"
+        echo -e "${WHITE}   1. sudo nano $primary_yaml${NC}"
+        echo -e "${WHITE}   2. addresses: bölümünü kontrol edin${NC}"
+        echo -e "${WHITE}   3. Indentation (girinti) hatalarını düzeltin${NC}"
         return 1
     fi
     
