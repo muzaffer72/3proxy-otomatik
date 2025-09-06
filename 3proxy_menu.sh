@@ -1501,7 +1501,7 @@ create_proxy_random() {
         if [[ "$proxy_type" == "s" ]]; then
             echo "auth strong" >> "$config_file"
             echo "allow $username" >> "$config_file"
-            echo "socks -i$current_ip -p$current_port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
             # Format: USER:PASS@IP:PORT
@@ -1509,7 +1509,7 @@ create_proxy_random() {
         else
             echo "auth strong" >> "$config_file"
             echo "allow $username" >> "$config_file"
-            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
             # Format: USER:PASS@IP:PORT
@@ -1670,7 +1670,7 @@ create_proxy_fixed() {
         if [[ "$proxy_type" == "s" ]]; then
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "socks -i$current_ip -p$assigned_port" >> "$config_file"
+            echo "socks -i$current_ip -p$assigned_port -e$current_ip" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
             # Format: USER:PASS@IP:PORT (clean format without subnet)
@@ -1678,7 +1678,7 @@ create_proxy_fixed() {
         else
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "proxy -a1 -n -i$current_ip -p$assigned_port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$assigned_port -e$current_ip" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
             # Format: USER:PASS@IP:PORT (clean format without subnet)
@@ -1844,11 +1844,11 @@ create_proxy_public() {
         
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
-            echo "socks -i$current_ip -p$current_port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
             # Public proxy format (no authentication): IP:PORT
             echo "$current_ip:$current_port" >> "$proxy_list_file"
         else
-            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
             # Public proxy format (no authentication): IP:PORT
             echo "$current_ip:$current_port" >> "$proxy_list_file"
         fi
@@ -2056,9 +2056,9 @@ create_proxy_maximum() {
         
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
-            echo "socks -i$current_ip -p$current_port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
         else
-            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port -e$current_ip" >> "$config_file"
         fi
         
         if [[ "$auth_mode" != "p" ]]; then
