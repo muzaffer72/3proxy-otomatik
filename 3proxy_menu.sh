@@ -1683,6 +1683,7 @@ create_proxy_fixed() {
     success "Port aralığı: $fixed_start_port-$actual_end_port"
     success "Mapping: IP1→3128, IP2→3129, IP3→3130, ..."
     success "Proxy listesi: $proxy_list_file"
+    echo -e "${BLUE}💡 Hız testi için Menü → 20 → Bu dosyayı seçin: $(basename "$proxy_list_file")${NC}"
     
     read -p "Proxy'leri başlatmak istiyor musunuz? [y/n]: " start_now
     if [[ "$start_now" =~ ^[Yy] ]]; then
@@ -2878,6 +2879,99 @@ open_specific_ports() {
     read -p "Press Enter to continue..."
 }
 
+# Select proxy list and validate
+select_and_validate_proxy_list() {
+    print_header
+    echo -e "${CYAN}🔍 PROXY LİSTESİ SEÇİMİ VE DOĞRULAMA${NC}"
+    echo "================================"
+    echo
+    
+    # Find available proxy lists
+    local proxy_files=()
+    
+    # Check IP list (original)
+    if [[ -f "$PROXY_LIST_FILE" ]]; then
+        proxy_files+=("$PROXY_LIST_FILE")
+        echo -e "${GRAY}1) IP Listesi: $PROXY_LIST_FILE ($(wc -l < "$PROXY_LIST_FILE") satır)${NC}"
+    fi
+    
+    # Check generated proxy lists
+    local count=1
+    for proxy_file in "${DATA_DIR}"/proxy_list_*.txt; do
+        if [[ -f "$proxy_file" ]]; then
+            ((count++))
+            proxy_files+=("$proxy_file")
+            echo -e "${GREEN}$count) Proxy Listesi: $(basename "$proxy_file") ($(wc -l < "$proxy_file") satır)${NC}"
+        fi
+    done
+    
+    if [[ ${#proxy_files[@]} -eq 0 ]]; then
+        error "Hiç proxy listesi bulunamadı! Önce proxy oluşturun."
+        return 1
+    fi
+    
+    echo
+    read -p "Hangi listeyi doğrulamak istiyorsunuz? [1-$count]: " choice
+    
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 ]] || [[ "$choice" -gt "$count" ]]; then
+        error "Geçersiz seçim"
+        return 1
+    fi
+    
+    local selected_file="${proxy_files[$((choice-1))]}"
+    echo -e "${BLUE}Seçilen: $selected_file${NC}"
+    echo
+    
+    validate_proxy_list "$selected_file"
+}
+
+# Select proxy list and test speeds
+select_and_test_proxy_speeds() {
+    print_header
+    echo -e "${CYAN}🚀 PROXY LİSTESİ SEÇİMİ VE HIZ TESTİ${NC}"
+    echo "================================"
+    echo
+    
+    # Find available proxy lists
+    local proxy_files=()
+    
+    # Check IP list (original) - but warn it's not suitable for testing
+    if [[ -f "$PROXY_LIST_FILE" ]]; then
+        proxy_files+=("$PROXY_LIST_FILE")
+        echo -e "${YELLOW}1) IP Listesi: $PROXY_LIST_FILE ($(wc -l < "$PROXY_LIST_FILE") satır) - ⚠️ Sadece IP'ler${NC}"
+    fi
+    
+    # Check generated proxy lists
+    local count=1
+    for proxy_file in "${DATA_DIR}"/proxy_list_*.txt; do
+        if [[ -f "$proxy_file" ]]; then
+            ((count++))
+            proxy_files+=("$proxy_file")
+            echo -e "${GREEN}$count) Proxy Listesi: $(basename "$proxy_file") ($(wc -l < "$proxy_file") satır) - ✅ Test edilebilir${NC}"
+        fi
+    done
+    
+    if [[ ${#proxy_files[@]} -eq 0 ]]; then
+        error "Hiç proxy listesi bulunamadı! Önce proxy oluşturun."
+        return 1
+    fi
+    
+    echo
+    echo -e "${GRAY}💡 Hız testi için oluşturulmuş proxy listelerini seçin (USER:PASS@IP:PORT formatı)${NC}"
+    read -p "Hangi listeyi test etmek istiyorsunuz? [1-$count]: " choice
+    
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 ]] || [[ "$choice" -gt "$count" ]]; then
+        error "Geçersiz seçim"
+        return 1
+    fi
+    
+    local selected_file="${proxy_files[$((choice-1))]}"
+    echo -e "${BLUE}Seçilen: $selected_file${NC}"
+    echo
+    
+    test_proxy_speeds "$selected_file"
+}
+
 # Main menu
 show_main_menu() {
     print_header
@@ -2922,8 +3016,8 @@ show_main_menu() {
     echo -e "${CYAN}16.${NC} Güncellemeleri Kontrol Et"
     echo -e "${CYAN}17.${NC} Log Görüntüle"
     echo -e "${CYAN}18.${NC} Konfigürasyon Yönetimi"
-    echo -e "${CYAN}19.${NC} Proxy'leri Doğrula"
-    echo -e "${CYAN}20.${NC} Proxy Hız Testi (passo.com.tr)"
+    echo -e "${CYAN}19.${NC} Proxy'leri Doğrula (Liste Seçimi)"
+    echo -e "${CYAN}20.${NC} Proxy Hız Testi (Liste Seçimi)"
     echo -e "${CYAN}21.${NC} Sunucu Yeniden Kur"
     echo -e "${CYAN}22.${NC} 3proxy Kaldır"
     echo -e "${CYAN} 0.${NC} Çıkış"
@@ -2960,8 +3054,8 @@ main() {
             16) check_updates ;;
             17) view_logs ;;
             18) manage_configs ;;
-            19) validate_proxy_list "$PROXY_LIST_FILE" ;;
-            20) test_proxy_speeds "$PROXY_LIST_FILE" ;;
+            19) select_and_validate_proxy_list ;;
+            20) select_and_test_proxy_speeds ;;
             21) reinstall_server ;;
             22) uninstall_3proxy ;;
             0) 
