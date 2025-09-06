@@ -2155,8 +2155,8 @@ check_updates() {
                     unzip -q master.zip
                     
                     if [ -f "3proxy-otomatik-master/3proxy_menu.sh" ]; then
-                        cp "3proxy-otomatik-master/3proxy_menu.sh" /usr/local/bin/3proxy-menu
-                        chmod +x /usr/local/bin/3proxy-menu
+                        cp "3proxy-otomatik-master/3proxy_menu.sh" /usr/local/bin/menu
+                        chmod +x /usr/local/bin/menu
                         success "Güncelleme tamamlandı! Scripti yeniden başlatın."
                         exit 0
                     else
