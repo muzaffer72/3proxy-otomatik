@@ -236,6 +236,9 @@ test_proxy_speed() {
     local proxy_line="$1"
     local expected_ip="$2"
     
+    # DEBUG: Show input
+    echo "DEBUG: Testing proxy: $proxy_line" >&2
+    
     # Parse different proxy formats (support subnet notation)
     local ip port username password
     
@@ -245,6 +248,7 @@ test_proxy_speed() {
         password="${BASH_REMATCH[2]}"
         ip="${BASH_REMATCH[3]}"  # IP without subnet
         port="${BASH_REMATCH[5]}"
+        echo "DEBUG: Parsed as USER:PASS@IP:PORT -> $username:***@$ip:$port" >&2
     elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
         # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
         ip="${BASH_REMATCH[1]}"  # IP without subnet
@@ -272,23 +276,40 @@ test_proxy_speed() {
     
     if [[ -n "$username" ]] && [[ -n "$password" ]]; then
         # Authenticated proxy
+        echo "DEBUG: Testing with auth: $username:***@$ip:$port" >&2
         test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$username:$password@$ip:$port" https://passo.com.tr 2>/dev/null)
     else
         # Public proxy (no authentication)
+        echo "DEBUG: Testing without auth: $ip:$port" >&2
         test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$ip:$port" https://passo.com.tr 2>/dev/null)
     fi
     
+    local curl_exit_code=$?
     local end_time=$(date +%s%3N)
     local total_time=$((end_time - start_time))
     
-    if [[ $? -eq 0 ]] && [[ -n "$test_result" ]]; then
+    echo "DEBUG: curl exit: $curl_exit_code, result: [$test_result], total_time: ${total_time}ms" >&2
+    
+    if [[ $curl_exit_code -eq 0 ]] && [[ -n "$test_result" ]]; then
         local http_code=$(echo "$test_result" | tail -1 | cut -d'|' -f1)
         local curl_time=$(echo "$test_result" | tail -1 | cut -d'|' -f2)
         
-        # Convert curl time to milliseconds
-        local ms_time=$(echo "scale=0; $curl_time * 1000" | bc -l 2>/dev/null || echo "$total_time")
+        # Convert curl time to milliseconds (bc alternative)
+        local ms_time
+        if command -v bc >/dev/null 2>&1; then
+            ms_time=$(echo "scale=0; $curl_time * 1000" | bc -l 2>/dev/null || echo "$total_time")
+        else
+            # Alternative without bc: use awk or simple multiplication
+            ms_time=$(awk "BEGIN {printf \"%.0f\", $curl_time * 1000}" 2>/dev/null || echo "$total_time")
+        fi
         
-        if [[ "$http_code" -eq 200 ]] || [[ "$http_code" -eq 301 ]] || [[ "$http_code" -eq 302 ]]; then
+        echo "DEBUG: HTTP Code: $http_code, Time: ${curl_time}s, MS: ${ms_time}ms" >&2
+        
+        # Check for valid HTTP codes (000 means proxy connection failed)
+        if [[ "$http_code" == "000" ]]; then
+            echo "$total_time|PROXY_CONNECTION_FAILED"
+            return 4
+        elif [[ "$http_code" -eq 200 ]] || [[ "$http_code" -eq 301 ]] || [[ "$http_code" -eq 302 ]]; then
             echo "$ms_time|ÇALIŞIYOR"
             return 0
         else
@@ -496,7 +517,9 @@ test_proxy_speeds() {
     # Show first few proxies for debugging
     echo -e "${GRAY}İlk 3 proxy örneği:${NC}"
     head -3 "$proxy_file" | nl
-    echo    echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
+    echo
+    
+    echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
     echo
     printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
     echo "------------------------------------------------------------"
@@ -507,6 +530,9 @@ test_proxy_speeds() {
         fi
         
         ((tested_count++))
+        
+        # DEBUG: Show what we're processing
+        log "Processing proxy line $tested_count: $proxy_line"
         
         # Parse different proxy formats to extract IP and port for display
         local expected_ip port
