@@ -1546,37 +1546,21 @@ create_proxy_fixed() {
     echo "Dosya: $PROXY_LIST_FILE"
     echo
     
-    # Auto-calculate recommended port range
-    port_range=$(calculate_port_range "$ip_count" 3 10000)
-    recommended_start=$(echo "$port_range" | cut -d':' -f1)
-    recommended_end=$(echo "$port_range" | cut -d':' -f2)
+    # FIXED MODE: Automatic port assignment (3128, 3129, 3130, ...)
+    # No user input needed for ports - sequential assignment based on IP count
     
-    echo -e "${GREEN}📊 Önerilen Port Aralığı:${NC}"
-    echo -e "${WHITE}• Ana IP (3128 portu sabit)${NC}"
-    echo -e "${WHITE}• Diğer IP'ler: $recommended_start-$recommended_end${NC}"
-    echo -e "${WHITE}• Maksimum: $((recommended_end - recommended_start + 1)) proxy${NC}"
+    echo -e "${GREEN}📊 FIXED MODE - Otomatik Port Ataması:${NC}"
+    echo -e "${WHITE}• Her IP için 1 proxy (1:1 mapping)${NC}"
+    echo -e "${WHITE}• Port ataması: 3128, 3129, 3130, ... (sequential)${NC}"
+    echo -e "${WHITE}• Toplam proxy: $ip_count adet${NC}"
     echo
     
-    read -p "Başlangıç portu [$recommended_start]: " start_port
-    read -p "Bitiş portu [$recommended_end]: " end_port
+    # Only ask for credentials and proxy type
     read -p "Kullanıcı adı: " fixed_user
     read -p "Şifre: " fixed_pass
-    
-    # Use recommended values if empty
-    [[ -z "$start_port" ]] && start_port=$recommended_start
-    [[ -z "$end_port" ]] && end_port=$recommended_end
     read -p "HTTP (h) veya SOCKS5 (s) [h/s]: " proxy_type
     
-    if [[ ! "$start_port" =~ ^[0-9]+$ ]] || [[ ! "$end_port" =~ ^[0-9]+$ ]]; then
-        error "Geçersiz port numarası"
-        return 1
-    fi
-    
-    if [ "$start_port" -ge "$end_port" ]; then
-        error "Başlangıç portu bitiş portundan küçük olmalı"
-        return 1
-    fi
-    
+    # Validate user input (no port validation needed in Fixed mode)
     if [[ -z "$fixed_user" ]] || [[ -z "$fixed_pass" ]]; then
         error "Kullanıcı adı ve şifre boş olamaz"
         return 1
