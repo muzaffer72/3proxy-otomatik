@@ -1,0 +1,29 @@
+# 3proxy IP Liste Örneği
+# Bu dosya proxy oluşturma için gereken IP adreslerini içerir
+# Her satırda bir IP adresi olmalıdır
+# IP'leri subnet ile birlikte girebilirsiniz (önerilen)
+# Boş satırlar ve # ile başlayan satırlar yok sayılır
+
+# Örnek IPv4 adresleri subnet ile (Kendi IP'lerinizle değiştirin)
+45.90.98.32/23
+45.90.98.33/23
+176.100.39.59/24
+176.100.36.39/24
+176.100.36.44/24
+185.14.92.130/24
+
+# Subnet olmadan da girebilirsiniz (otomatik tespit edilir)
+192.168.1.100
+192.168.1.101
+10.0.0.50
+172.16.1.10
+
+# NOTLAR:
+# - Subnet ile girilen IP'ler daha güvenilir
+# - /23 subnet = 512 IP (örn: 45.90.98.0-45.90.99.255)
+# - /24 subnet = 256 IP (örn: 176.100.39.1-176.100.39.254) 
+# - /22 subnet = 1024 IP (örn: 185.14.92.0-185.14.95.255)
+# - Her proxy için bir IPv4 adresi gereklidir
+# - IP adresleri sunucuda mevcut olmalıdır
+# - Maksimum mod için her IP'den 3 proxy oluşturulur
+# - Bu örnekte 10 IP = maksimum 30 proxy oluşturulabilir
