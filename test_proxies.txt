@@ -1,0 +1,13 @@
+# Test Proxy Listesi - Yeni Format: USER:PASS@IP:PORT
+user1001:abc123xyz456@192.168.1.10:3128
+user1002:def789uvw123@192.168.1.11:3128
+user1003:ghi456rst789@192.168.1.10:3129
+user1004:jkl123mno456@192.168.1.12:3128
+
+# Public proxy format: IP:PORT
+192.168.1.13:3128
+192.168.1.14:3129
+
+# Legacy format (still supported): IP:PORT:USER:PASS
+192.168.1.15:3128:user1005:legacy123
+192.168.1.16:3129:user1006:legacy456

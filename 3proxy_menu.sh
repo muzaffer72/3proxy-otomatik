@@ -145,11 +145,31 @@ test_proxy() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # Parse proxy format: ip:port:username:password or ip:port (for public)
-    local ip=$(echo "$proxy_line" | cut -d':' -f1)
-    local port=$(echo "$proxy_line" | cut -d':' -f2)
-    local username=$(echo "$proxy_line" | cut -d':' -f3)
-    local password=$(echo "$proxy_line" | cut -d':' -f4)
+    # Parse different proxy formats
+    local ip port username password
+    
+    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
+        # Format: USER:PASS@IP:PORT
+        username="${BASH_REMATCH[1]}"
+        password="${BASH_REMATCH[2]}"
+        ip="${BASH_REMATCH[3]}"
+        port="${BASH_REMATCH[4]}"
+    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
+        # Format: IP:PORT:USER:PASS (legacy)
+        ip="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[2]}"
+        username="${BASH_REMATCH[3]}"
+        password="${BASH_REMATCH[4]}"
+    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
+        # Format: IP:PORT (public proxy)
+        ip="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[2]}"
+        username=""
+        password=""
+    else
+        echo "Invalid proxy format: $proxy_line" >&2
+        return 1
+    fi
     
     # Validate basic format
     if [[ -z "$ip" ]] || [[ -z "$port" ]]; then
@@ -161,7 +181,7 @@ test_proxy() {
     local test_result
     local curl_exit_code
     
-    if [[ -n "$username" ]] && [[ -n "$password" ]] && [[ "$username" != "$password" ]]; then
+    if [[ -n "$username" ]] && [[ -n "$password" ]]; then
         # Authenticated proxy
         test_result=$(timeout 15 curl -s --connect-timeout 10 --max-time 15 \
                      --proxy "$username:$password@$ip:$port" \
@@ -216,17 +236,37 @@ test_proxy_speed() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # Parse proxy format: ip:port:username:password or ip:port (for public)
-    local ip=$(echo "$proxy_line" | cut -d':' -f1)
-    local port=$(echo "$proxy_line" | cut -d':' -f2)
-    local username=$(echo "$proxy_line" | cut -d':' -f3)
-    local password=$(echo "$proxy_line" | cut -d':' -f4)
+    # Parse different proxy formats
+    local ip port username password
+    
+    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
+        # Format: USER:PASS@IP:PORT
+        username="${BASH_REMATCH[1]}"
+        password="${BASH_REMATCH[2]}"
+        ip="${BASH_REMATCH[3]}"
+        port="${BASH_REMATCH[4]}"
+    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
+        # Format: IP:PORT:USER:PASS (legacy)
+        ip="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[2]}"
+        username="${BASH_REMATCH[3]}"
+        password="${BASH_REMATCH[4]}"
+    elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
+        # Format: IP:PORT (public proxy)
+        ip="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[2]}"
+        username=""
+        password=""
+    else
+        echo "0|FORMAT_ERROR"
+        return 1
+    fi
     
     # Test with passo.com.tr for speed
     local start_time=$(date +%s%3N)
     local test_result
     
-    if [[ -n "$username" ]] && [[ -n "$password" ]] && [[ "$username" != "$password" ]]; then
+    if [[ -n "$username" ]] && [[ -n "$password" ]]; then
         # Authenticated proxy
         test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$username:$password@$ip:$port" https://passo.com.tr 2>/dev/null)
     else
@@ -310,8 +350,35 @@ validate_proxy_list() {
         fi
         
         ((tested_count++))
-        local expected_ip=$(echo "$proxy_line" | cut -d':' -f1)
-        local port=$(echo "$proxy_line" | cut -d':' -f2)
+        
+        # Parse different proxy formats
+        local expected_ip port username password
+        
+        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
+            # Format: USER:PASS@IP:PORT
+            username="${BASH_REMATCH[1]}"
+            password="${BASH_REMATCH[2]}"
+            expected_ip="${BASH_REMATCH[3]}"
+            port="${BASH_REMATCH[4]}"
+        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
+            # Format: IP:PORT:USER:PASS (legacy)
+            expected_ip="${BASH_REMATCH[1]}"
+            port="${BASH_REMATCH[2]}"
+            username="${BASH_REMATCH[3]}"
+            password="${BASH_REMATCH[4]}"
+        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
+            # Format: IP:PORT (public proxy)
+            expected_ip="${BASH_REMATCH[1]}"
+            port="${BASH_REMATCH[2]}"
+            username=""
+            password=""
+        else
+            if [[ "$show_details" == "true" ]]; then
+                printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "UNKNOWN" "N/A"
+            fi
+            ((failed_count++))
+            continue
+        fi
         
         if [[ "$show_details" == "true" ]]; then
             printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
@@ -423,8 +490,26 @@ test_proxy_speeds() {
         fi
         
         ((tested_count++))
-        local expected_ip=$(echo "$proxy_line" | cut -d':' -f1)
-        local port=$(echo "$proxy_line" | cut -d':' -f2)
+        
+        # Parse different proxy formats to extract IP and port for display
+        local expected_ip port
+        
+        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:]+):([0-9]+)$ ]]; then
+            # Format: USER:PASS@IP:PORT
+            expected_ip="${BASH_REMATCH[3]}"
+            port="${BASH_REMATCH[4]}"
+        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+):([^:]+):(.+)$ ]]; then
+            # Format: IP:PORT:USER:PASS (legacy)
+            expected_ip="${BASH_REMATCH[1]}"
+            port="${BASH_REMATCH[2]}"
+        elif [[ "$proxy_line" =~ ^([^:]+):([0-9]+)$ ]]; then
+            # Format: IP:PORT (public proxy)
+            expected_ip="${BASH_REMATCH[1]}"
+            port="${BASH_REMATCH[2]}"
+        else
+            expected_ip="UNKNOWN"
+            port="N/A"
+        fi
         
         printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
         
@@ -871,14 +956,7 @@ configure_netplan() {
         fi
     done
     
-    # Clean up IPv6 addresses (optional)
-    read -p "IPv6 adreslerini kaldırmak istiyor musunuz? [y/N]: " remove_ipv6
-    if [[ "$remove_ipv6" =~ ^[Yy] ]]; then
-        log "IPv6 adresleri kaldırılıyor..."
-        # Remove lines containing IPv6 addresses (contains ::)
-        sed -i '/.*::.*$/d' "$primary_yaml"
-        log "  ✅ IPv6 adresleri kaldırıldı"
-    fi
+    
     
     # Quick validation and apply
     log "Netplan test ediliyor..."
@@ -1299,6 +1377,15 @@ create_proxy_random() {
     echo "auth strong" >> "$config_file"
     echo "" >> "$config_file"
     
+    # Create proxies with automatic port assignment per IP
+    # Each IP starts from port 3128 and increments +1 for each additional proxy on that IP
+    local ip_port_map=()
+    
+    # Initialize starting ports for each IP (3128)
+    for (( i=0; i<total_ips; i++ )); do
+        ip_port_map[i]=3128
+    done
+    
     port="$start_port"
     ip_index=0
     
@@ -1311,6 +1398,10 @@ create_proxy_random() {
         current_ip="${clean_ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
+        # Get the current port for this IP and increment it for next use
+        current_port=${ip_port_map[$ip_index]}
+        ip_port_map[$ip_index]=$((current_port + 1))
+        
         # Add user
         echo "${username}:CL:${password}" >> "$users_file"
         
@@ -1318,17 +1409,19 @@ create_proxy_random() {
         if [[ "$proxy_type" == "s" ]]; then
             echo "auth strong" >> "$config_file"
             echo "allow $username" >> "$config_file"
-            echo "socks -i$current_ip -p$port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            echo "$current_ip:$port:$username:$password" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$username:$password@$current_ip:$current_port" >> "$proxy_list_file"
         else
             echo "auth strong" >> "$config_file"
             echo "allow $username" >> "$config_file"
-            echo "proxy -a1 -n -i$current_ip -p$port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            echo "$current_ip:$port:$username:$password" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$username:$password@$current_ip:$current_port" >> "$proxy_list_file"
         fi
         
         port=$((port + 1))
@@ -1339,8 +1432,17 @@ create_proxy_random() {
     chmod 600 "$users_file"
     chown proxy:proxy "$users_file"
     
-    # Open firewall ports
-    open_firewall_ports "$start_port" "$end_port" "tcp"
+    # Open firewall ports with dynamic port calculation for random proxy
+    # Calculate real port range based on 3128 start + proxy count per IP
+    local total_proxy_count=$((end_port - start_port + 1))
+    local ports_per_ip=$((total_proxy_count / total_ips))
+    if [[ $((total_proxy_count % total_ips)) -gt 0 ]]; then
+        ports_per_ip=$((ports_per_ip + 1))
+    fi
+    local actual_end_port=$((3128 + ports_per_ip - 1))
+    
+    # Open firewall for the actual port range used (3128 to calculated end)
+    open_firewall_ports "3128" "$actual_end_port" "tcp"
     
     # Create zip file
     create_proxy_zip "$proxy_list_file" "random"
@@ -1463,6 +1565,15 @@ create_proxy_fixed() {
     echo "auth strong" >> "$config_file"
     echo "" >> "$config_file"
     
+    # Create proxies with automatic port assignment per IP
+    # Each IP starts from port 3128 and increments +1 for each additional proxy on that IP
+    local ip_port_map=()
+    
+    # Initialize starting ports for each IP (3128)
+    for (( i=0; i<total_ips; i++ )); do
+        ip_port_map[i]=3128
+    done
+    
     port="$start_port"
     ip_index=0
     
@@ -1471,21 +1582,27 @@ create_proxy_fixed() {
         current_ip="${ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
+        # Get the current port for this IP and increment it for next use
+        current_port=${ip_port_map[$ip_index]}
+        ip_port_map[$ip_index]=$((current_port + 1))
+        
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "socks -i$current_ip -p$port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            echo "$current_ip:$port:$fixed_user:$fixed_pass" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$fixed_user:$fixed_pass@$current_ip:$current_port" >> "$proxy_list_file"
         else
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
-            echo "proxy -a1 -n -i$current_ip -p$port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
             echo "flush" >> "$config_file"
             echo "" >> "$config_file"
-            echo "$current_ip:$port:$fixed_user:$fixed_pass" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$fixed_user:$fixed_pass@$current_ip:$current_port" >> "$proxy_list_file"
         fi
         
         port=$((port + 1))
@@ -1496,8 +1613,17 @@ create_proxy_fixed() {
     chmod 600 "$users_file"
     chown proxy:proxy "$users_file"
     
-    # Open firewall ports
-    open_firewall_ports "$start_port" "$end_port" "tcp"
+    # Open firewall ports with dynamic port calculation for fixed proxy
+    # Calculate real port range based on 3128 start + proxy count per IP
+    local total_proxy_count=$((end_port - start_port + 1))
+    local ports_per_ip=$((total_proxy_count / total_ips))
+    if [[ $((total_proxy_count % total_ips)) -gt 0 ]]; then
+        ports_per_ip=$((ports_per_ip + 1))
+    fi
+    local actual_end_port=$((3128 + ports_per_ip - 1))
+    
+    # Open firewall for the actual port range used (3128 to calculated end)
+    open_firewall_ports "3128" "$actual_end_port" "tcp"
     
     # Create zip file
     create_proxy_zip "$proxy_list_file" "fixed"
@@ -1609,6 +1735,15 @@ create_proxy_public() {
     echo "allow *" >> "$config_file"
     echo "" >> "$config_file"
     
+    # Create proxies with automatic port assignment per IP
+    # Each IP starts from port 3128 and increments +1 for each additional proxy on that IP
+    local ip_port_map=()
+    
+    # Initialize starting ports for each IP (3128)
+    for (( i=0; i<total_ips; i++ )); do
+        ip_port_map[i]=3128
+    done
+    
     port="$start_port"
     ip_index=0
     
@@ -1617,21 +1752,36 @@ create_proxy_public() {
         current_ip="${ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
+        # Get the current port for this IP and increment it for next use
+        current_port=${ip_port_map[$ip_index]}
+        ip_port_map[$ip_index]=$((current_port + 1))
+        
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
-            echo "socks -i$current_ip -p$port" >> "$config_file"
-            echo "$current_ip:$port" >> "$proxy_list_file"
+            echo "socks -i$current_ip -p$current_port" >> "$config_file"
+            # Public proxy format (no authentication): IP:PORT
+            echo "$current_ip:$current_port" >> "$proxy_list_file"
         else
-            echo "proxy -a1 -n -i$current_ip -p$port" >> "$config_file"
-            echo "$current_ip:$port" >> "$proxy_list_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
+            # Public proxy format (no authentication): IP:PORT
+            echo "$current_ip:$current_port" >> "$proxy_list_file"
         fi
         
         port=$((port + 1))
         ip_index=$(((ip_index + 1) % total_ips))
     done
     
-    # Open firewall ports
-    open_firewall_ports "$start_port" "$end_port" "tcp"
+    # Open firewall ports with dynamic port calculation for public proxy
+    # Calculate real port range based on 3128 start + proxy count per IP
+    local total_proxy_count=$((end_port - start_port + 1))
+    local ports_per_ip=$((total_proxy_count / total_ips))
+    if [[ $((total_proxy_count % total_ips)) -gt 0 ]]; then
+        ports_per_ip=$((ports_per_ip + 1))
+    fi
+    local actual_end_port=$((3128 + ports_per_ip - 1))
+    
+    # Open firewall for the actual port range used (3128 to calculated end)
+    open_firewall_ports "3128" "$actual_end_port" "tcp"
     
     # Create zip file
     create_proxy_zip "$proxy_list_file" "public"
@@ -1763,6 +1913,15 @@ create_proxy_maximum() {
         echo "" >> "$config_file"
     fi
     
+    # Create proxies with automatic port assignment per IP
+    # Each IP starts from port 3128 and increments +1 for each additional proxy on that IP
+    local ip_port_map=()
+    
+    # Initialize starting ports for each IP (3128)
+    for (( i=0; i<total_ips; i++ )); do
+        ip_port_map[i]=3128
+    done
+    
     port="$start_port"
     ip_index=0
     proxy_per_ip=0
@@ -1772,12 +1931,17 @@ create_proxy_maximum() {
         current_ip="${ips[$ip_index]}"
         current_ip=$(echo "$current_ip" | tr -d '\r\n ')
         
+        # Get the current port for this IP and increment it for next use
+        current_port=${ip_port_map[$ip_index]}
+        ip_port_map[$ip_index]=$((current_port + 1))
+        
         if [[ "$auth_mode" == "r" ]]; then
             # Random credentials
             username="user$(shuf -i 1000-9999 -n 1)"
             password="$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)"
             echo "${username}:CL:${password}" >> "$users_file"
-            echo "$current_ip:$port:$username:$password" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$username:$password@$current_ip:$current_port" >> "$proxy_list_file"
             
             echo "auth strong" >> "$config_file"
             echo "allow $username" >> "$config_file"
@@ -1786,20 +1950,21 @@ create_proxy_maximum() {
             if [ "$proxy_per_ip" -eq 0 ]; then
                 echo "${fixed_user}:CL:${fixed_pass}" >> "$users_file"
             fi
-            echo "$current_ip:$port:$fixed_user:$fixed_pass" >> "$proxy_list_file"
+            # Format: USER:PASS@IP:PORT
+            echo "$fixed_user:$fixed_pass@$current_ip:$current_port" >> "$proxy_list_file"
             
             echo "auth strong" >> "$config_file"
             echo "allow $fixed_user" >> "$config_file"
         else
-            # Public
-            echo "$current_ip:$port" >> "$proxy_list_file"
+            # Public proxy format (no authentication): IP:PORT
+            echo "$current_ip:$current_port" >> "$proxy_list_file"
         fi
         
         # Add proxy config
         if [[ "$proxy_type" == "s" ]]; then
-            echo "socks -i$current_ip -p$port" >> "$config_file"
+            echo "socks -i$current_ip -p$current_port" >> "$config_file"
         else
-            echo "proxy -a1 -n -i$current_ip -p$port" >> "$config_file"
+            echo "proxy -a1 -n -i$current_ip -p$current_port" >> "$config_file"
         fi
         
         if [[ "$auth_mode" != "p" ]]; then
@@ -1821,8 +1986,12 @@ create_proxy_maximum() {
         chown proxy:proxy "$users_file"
     fi
     
-    # Open firewall ports
-    open_firewall_ports "$start_port" "$end_port" "tcp"
+    # Open firewall ports with dynamic port calculation for maximum proxy
+    # Calculate real port range based on 3128 start + proxy count per IP (3 per IP max)
+    local actual_end_port=$((3128 + 2))  # Maximum 3 proxies per IP: 3128, 3129, 3130
+    
+    # Open firewall for the actual port range used (3128 to 3130)
+    open_firewall_ports "3128" "$actual_end_port" "tcp"
     
     # Create zip file
     create_proxy_zip "$proxy_list_file" "maximum"
