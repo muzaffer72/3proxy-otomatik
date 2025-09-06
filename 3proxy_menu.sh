@@ -248,18 +248,13 @@ show_proxy_content() {
     echo -e "==================================${NC}\n"
     
     if [ -f "$PROXY_LIST_FILE" ] && [ -s "$PROXY_LIST_FILE" ]; then
-        echo -e "${CYAN}Proxy Listesi ($PROXY_LIST_FILE):${NC}\n"
+        echo -e "${CYAN}Proxy Listesi Dosyası: ${WHITE}$PROXY_LIST_FILE${NC}\n"
+        echo -e "${CYAN}İçerik:${NC}\n"
         echo -e "${WHITE}$(cat "$PROXY_LIST_FILE")${NC}\n"
         
         # Proxy sayısını göster
         local proxy_count=$(wc -l < "$PROXY_LIST_FILE" 2>/dev/null || echo "0")
         echo -e "${YELLOW}Toplam Proxy Sayısı: $proxy_count${NC}\n"
-        
-        # 3proxy config dosyasını da göster
-        if [ -f "/etc/3proxy/3proxy.cfg" ]; then
-            echo -e "${CYAN}3proxy Konfigürasyon Dosyası (/etc/3proxy/3proxy.cfg):${NC}\n"
-            echo -e "${WHITE}$(cat /etc/3proxy/3proxy.cfg)${NC}\n"
-        fi
         
         # Servis durumu
         if systemctl is-active --quiet 3proxy; then
@@ -269,6 +264,7 @@ show_proxy_content() {
         fi
     else
         echo -e "${RED}Proxy listesi bulunamadı veya boş${NC}"
+        echo -e "${YELLOW}Dosya: $PROXY_LIST_FILE${NC}"
         echo -e "${YELLOW}Önce 'Sabit (Fixed) Proxy Modu' ile proxy listesi oluşturun${NC}"
     fi
     
