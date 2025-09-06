@@ -151,30 +151,65 @@ test_proxy() {
     local username=$(echo "$proxy_line" | cut -d':' -f3)
     local password=$(echo "$proxy_line" | cut -d':' -f4)
     
-    # Test HTTP proxy
-    local test_result
-    if [[ -n "$username" ]] && [[ -n "$password" ]] && [[ "$username" != "$password" ]]; then
-        # Authenticated proxy
-        test_result=$(timeout 10 curl -s --proxy "$username:$password@$ip:$port" http://httpbin.org/ip 2>/dev/null)
-    else
-        # Public proxy (no authentication)
-        test_result=$(timeout 10 curl -s --proxy "$ip:$port" http://httpbin.org/ip 2>/dev/null)
+    # Validate basic format
+    if [[ -z "$ip" ]] || [[ -z "$port" ]]; then
+        echo "Invalid proxy format: $proxy_line" >&2
+        return 1
     fi
     
-    if [[ $? -eq 0 ]] && [[ -n "$test_result" ]]; then
-        # Extract origin IP from JSON response
-        local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4)
-        
-        if [[ "$origin_ip" == "$expected_ip" ]]; then
-            return 0  # Success
-        else
-            echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
-            return 1  # IP mismatch
-        fi
+    # Test HTTP proxy with more robust error handling
+    local test_result
+    local curl_exit_code
+    
+    if [[ -n "$username" ]] && [[ -n "$password" ]] && [[ "$username" != "$password" ]]; then
+        # Authenticated proxy
+        test_result=$(timeout 15 curl -s --connect-timeout 10 --max-time 15 \
+                     --proxy "$username:$password@$ip:$port" \
+                     --user-agent "Mozilla/5.0 (compatible; ProxyTest/1.0)" \
+                     http://httpbin.org/ip 2>/dev/null)
+        curl_exit_code=$?
     else
-        echo "Connection failed or timeout" >&2
-        return 2  # Connection failed
+        # Public proxy (no authentication)
+        test_result=$(timeout 15 curl -s --connect-timeout 10 --max-time 15 \
+                     --proxy "$ip:$port" \
+                     --user-agent "Mozilla/5.0 (compatible; ProxyTest/1.0)" \
+                     http://httpbin.org/ip 2>/dev/null)
+        curl_exit_code=$?
     fi
+    
+    # Handle different curl exit codes
+    case $curl_exit_code in
+        0)
+            # Success - check response
+            if [[ -n "$test_result" ]]; then
+                # Extract origin IP from JSON response
+                local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 | cut -d',' -f1)
+                
+                if [[ -n "$origin_ip" ]]; then
+                    if [[ "$origin_ip" == "$expected_ip" ]]; then
+                        return 0  # Success
+                    else
+                        echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
+                        return 1  # IP mismatch
+                    fi
+                else
+                    echo "Invalid JSON response" >&2
+                    return 1
+                fi
+            else
+                echo "Empty response" >&2
+                return 1
+            fi
+            ;;
+        28|7)
+            # Timeout or connection failed
+            return 2
+            ;;
+        *)
+            echo "Curl failed with code $curl_exit_code" >&2
+            return 1
+            ;;
+    esac
 }
 
 test_proxy_speed() {
@@ -231,6 +266,17 @@ validate_proxy_list() {
         return 1
     fi
     
+    # Check if file is readable and not empty
+    if [[ ! -r "$proxy_file" ]]; then
+        error "Proxy dosyası okunamıyor: $proxy_file"
+        return 1
+    fi
+    
+    if [[ ! -s "$proxy_file" ]]; then
+        error "Proxy dosyası boş: $proxy_file"
+        return 1
+    fi
+    
     local total_proxies=$(wc -l < "$proxy_file")
     local tested_count=0
     local success_count=0
@@ -241,46 +287,62 @@ validate_proxy_list() {
         print_header
         echo -e "${CYAN}🔍 PROXY DOĞRULAMA SİSTEMİ${NC}"
         echo "=================================="
+        echo -e "${WHITE}Proxy Dosyası: ${BLUE}$proxy_file${NC}"
         echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
         echo -e "${WHITE}Test URL: ${BLUE}http://httpbin.org/ip${NC}"
         echo
+        
+        # Show first few proxies for debugging
+        echo -e "${GRAY}İlk 3 proxy örneği:${NC}"
+        head -3 "$proxy_file" | nl
+        echo
+        
         echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
         echo
+        printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "DURUM" "SONUÇ"
+        echo "=================================================="
     fi
     
     while IFS= read -r proxy_line; do
-        if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]]; then
+        # Skip empty lines and comments
+        if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]] || [[ "$proxy_line" =~ ^[[:space:]]*$ ]]; then
             continue
         fi
         
         ((tested_count++))
         local expected_ip=$(echo "$proxy_line" | cut -d':' -f1)
+        local port=$(echo "$proxy_line" | cut -d':' -f2)
         
         if [[ "$show_details" == "true" ]]; then
-            printf "%-3s %-15s %-6s " "$tested_count." "$expected_ip" "$(echo "$proxy_line" | cut -d':' -f2)"
+            printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
         fi
         
+        # Test the proxy with timeout
         if test_result=$(test_proxy "$proxy_line" "$expected_ip" 2>&1); then
             ((success_count++))
             if [[ "$show_details" == "true" ]]; then
-                echo -e "${GREEN}✅ BAŞARILI${NC}"
+                echo -e "TESTING  ${GREEN}✅ BAŞARILI${NC}"
             fi
         elif [[ $? -eq 2 ]]; then
             ((timeout_count++))
             if [[ "$show_details" == "true" ]]; then
-                echo -e "${RED}❌ TIMEOUT${NC}"
+                echo -e "TIMEOUT  ${YELLOW}⏱️  ZAMAN AŞIMI${NC}"
             fi
         else
             ((failed_count++))
             if [[ "$show_details" == "true" ]]; then
-                echo -e "${RED}❌ HATA: $test_result${NC}"
+                echo -e "FAILED   ${RED}❌ HATA${NC}"
+                [[ -n "$test_result" ]] && echo -e "${GRAY}         └─ $test_result${NC}"
             fi
         fi
         
         # Progress indicator
-        if [[ "$show_details" == "true" ]] && (( tested_count % 10 == 0 )); then
-            echo -e "${BLUE}[İlerleme: $tested_count/$total_proxies]${NC}"
+        if [[ "$show_details" == "true" ]] && (( tested_count % 5 == 0 )); then
+            echo -e "${BLUE}         [İlerleme: $tested_count/$total_proxies - Başarı: $success_count]${NC}"
         fi
+        
+        # Small delay to prevent overwhelming
+        sleep 0.1
         
     done < "$proxy_file"
     
@@ -315,6 +377,16 @@ test_proxy_speeds() {
         return 1
     fi
     
+    if [[ ! -r "$proxy_file" ]]; then
+        error "Proxy dosyası okunamıyor: $proxy_file"
+        return 1
+    fi
+    
+    if [[ ! -s "$proxy_file" ]]; then
+        error "Proxy dosyası boş: $proxy_file"
+        return 1
+    fi
+    
     # Check if bc is installed for calculations
     if ! command -v bc >/dev/null; then
         log "bc yükleniyor..."
@@ -330,9 +402,16 @@ test_proxy_speeds() {
     print_header
     echo -e "${CYAN}🚀 PROXY HIZ TESTİ - PASSO.COM.TR${NC}"
     echo "=============================================="
+    echo -e "${WHITE}Proxy Dosyası: ${BLUE}$proxy_file${NC}"
     echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
     echo -e "${WHITE}Test Sitesi: ${BLUE}https://passo.com.tr${NC}"
     echo
+    
+    # Show first few proxies for debugging
+    echo -e "${GRAY}İlk 3 proxy örneği:${NC}"
+    head -3 "$proxy_file" | nl
+    echo
+    
     echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
     echo
     printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
