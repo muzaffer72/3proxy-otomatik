@@ -1,8 +1,8 @@
-# 3proxy Elite Manager v2.4
+# 3proxy Elite Manager v2.5
 
-**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Global Menu Komutu**
+**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Basit Netplan Konfigürasyonu**
 
-Bu script, Ubuntu 20.04+ işletim sistemlerinde çalışan kapsamlı bir 3proxy yönetim sistemidir. Sınırsız proxy oluşturma, çoklu mod desteği ve gelişmiş yönetim özellikleri sunar. Artık tüm sistem tek dosyada!
+Bu script, Ubuntu 20.04+ işletim sistemlerinde çalışan kapsamlı bir 3proxy yönetim sistemidir. Sınırsız proxy oluşturma, çoklu mod desteği, gelişmiş yönetim özellikleri ve basitleştirilmiş netplan IP yönetimi sunar.
 
 ## 🚀 Özellikler
 
