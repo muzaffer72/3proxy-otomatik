@@ -65,13 +65,23 @@ install_system() {
     cp "$0" "$install_dir/3proxy_menu.sh"
     chmod +x "$install_dir/3proxy_menu.sh"
 
-    # Create global commands
+    # Create global commands with proper permissions
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-menu
+    
+    # Ensure symlinks are executable
+    chmod +x /usr/local/bin/menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
+    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
 
     echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
+    echo
+    echo -e "${CYAN}🔗 Test global komutları:${NC}"
+    echo -e "   ${WHITE}which menu${NC} - Komut konumunu kontrol et"
+    echo -e "   ${WHITE}ls -la /usr/local/bin/menu${NC} - Dosya izinlerini kontrol et"
     echo
     echo -e "${GREEN}🚀 Global Komutlar:${NC}"
     echo -e "   ${BLUE}sudo menu${NC}               # Kısa komut (herhangi bir yerden)"
@@ -501,16 +511,28 @@ install_3proxy() {
     
     # Create global menu commands
     current_script_path=$(realpath "$0")
+    
+    # Ensure script is executable
+    chmod +x "$current_script_path"
+    
+    # Create symlinks with proper permissions
     ln -sf "$current_script_path" /usr/local/bin/menu 2>/dev/null || true
     ln -sf "$current_script_path" /usr/local/bin/3proxy 2>/dev/null || true  
     ln -sf "$current_script_path" /usr/local/bin/proxy-menu 2>/dev/null || true
     ln -sf "$current_script_path" /usr/local/bin/3proxy-manager 2>/dev/null || true
     
+    # Make symlinks executable
+    chmod +x /usr/local/bin/menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
+    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
+    
     success "3proxy başarıyla kuruldu"
     echo -e "${CYAN}💡 Global komutlar oluşturuldu:${NC}"
-    echo -e "   ${BLUE}sudo menu${NC} - Herhangi bir yerden menüyü aç"
-    echo -e "   ${BLUE}sudo 3proxy${NC} - Ana komut"
-    echo -e "   ${BLUE}sudo proxy-menu${NC} - Alternatif komut"
+    echo -e "   ${BLUE}menu${NC} - Herhangi bir yerden menüyü aç"
+    echo -e "   ${BLUE}3proxy${NC} - Ana komut"
+    echo -e "   ${BLUE}proxy-menu${NC} - Alternatif komut"
+    echo -e "   ${BLUE}3proxy-manager${NC} - Manager komutu"
     echo
     read -p "Press Enter to continue..."
 }
@@ -733,7 +755,12 @@ configure_netplan() {
     log "Yedek oluşturuluyor: $backup_file"
     cp "$primary_yaml" "$backup_file"
     
-    # Add IPs simply
+    # Clean up wrongly placed IPs first (lines starting with 6 spaces + -)  
+    log "Yanlış yere eklenmiş IP'ler temizleniyor..."
+    sed -i '/^      - [0-9]/d' "$primary_yaml"
+    log "  ✅ Dosya sonundaki IP'ler temizlendi"
+    
+    # Add IPs to addresses section correctly
     for ip in "${missing_ips[@]}"; do
         local final_ip="$ip"
         if [[ "$ip" != *"/"* ]]; then
@@ -741,10 +768,38 @@ configure_netplan() {
             final_ip="$ip$detected_subnet"
         fi
         
-        # Simply append with standard indentation
-        echo "      - $final_ip" >> "$primary_yaml"
-        log "  ✅ $final_ip eklendi"
+        # Find addresses: line and add IP with correct indentation
+        if grep -q "addresses:" "$primary_yaml"; then
+            # Get the line number of addresses:
+            local addr_line=$(grep -n "addresses:" "$primary_yaml" | head -1 | cut -d: -f1)
+            local next_line=$((addr_line + 1))
+            
+            # Check if there are existing IPs to match indentation
+            local existing_indent=""
+            if sed -n "${next_line}p" "$primary_yaml" | grep -q "^[[:space:]]*-"; then
+                # Get indentation from existing IP
+                existing_indent=$(sed -n "${next_line}p" "$primary_yaml" | sed 's/-.*//')
+            else
+                # Default indentation (12 spaces for addresses list)
+                existing_indent="            "
+            fi
+            
+            # Add IP with correct indentation using sed
+            sed -i "${addr_line}a\\${existing_indent}- ${final_ip}" "$primary_yaml"
+            log "  ✅ $final_ip eklendi (addresses listesine)"
+        else
+            error "  ❌ addresses: bölümü bulunamadı: $final_ip"
+        fi
     done
+    
+    # Clean up IPv6 addresses (optional)
+    read -p "IPv6 adreslerini kaldırmak istiyor musunuz? [y/N]: " remove_ipv6
+    if [[ "$remove_ipv6" =~ ^[Yy] ]]; then
+        log "IPv6 adresleri kaldırılıyor..."
+        # Remove lines containing IPv6 addresses (contains ::)
+        sed -i '/.*::.*$/d' "$primary_yaml"
+        log "  ✅ IPv6 adresleri kaldırıldı"
+    fi
     
     # Quick validation and apply
     log "Netplan test ediliyor..."
@@ -759,64 +814,46 @@ configure_netplan() {
     fi
 }
 
-show_manual_netplan_guide() {
-    local missing_ips=("$@")
+# Calculate optimal port range based on available IPs
+calculate_port_range() {
+    local total_ips="$1"
+    local proxies_per_ip="${2:-3}"  # Default 3 proxies per IP
+    local start_port="${3:-10000}"  # Default start port
     
-    print_header
-    echo -e "${CYAN}📋 MANUEL NETPLAN GÜNCELLEMESİ KILAVUZU${NC}"
-    echo "==========================================="
-    echo
-    
-    # Find primary netplan file
-    local yaml_files=($(find /etc/netplan -name "*.yaml" -o -name "*.yml" 2>/dev/null))
-    local primary_yaml="${yaml_files[0]}"
-    
-    if [[ -n "$primary_yaml" ]]; then
-        echo -e "${WHITE}📁 Düzenlenecek Dosya:${NC} $primary_yaml"
-        echo
-        echo -e "${YELLOW}🔧 Adımlar:${NC}"
-        echo -e "${WHITE}1.${NC} Dosyayı düzenle: ${BLUE}sudo nano $primary_yaml${NC}"
-        echo -e "${WHITE}2.${NC} 'addresses:' bölümünü bul"
-        echo -e "${WHITE}3.${NC} Aşağıdaki IP'leri listeye ekle:"
-        echo
-        
-        echo -e "${GREEN}📝 Eklenecek IP Adresleri:${NC}"
-        echo -e "${BLUE}    addresses:${NC}"
-        
-        # Show existing addresses first
-        if grep -A 20 "addresses:" "$primary_yaml" 2>/dev/null | grep -E "^[[:space:]]*-" | head -3; then
-            echo -e "${GRAY}    # (mevcut adresler yukarıda)${NC}"
-        fi
-        
-        # Show new addresses to add
-        for ip_entry in "${missing_ips[@]}"; do
-            local final_ip="$ip_entry"
-            if [[ "$ip_entry" != *"/"* ]]; then
-                detected_subnet=$(detect_subnet_for_ip "$ip_entry")
-                final_ip="$ip_entry$detected_subnet"
-            fi
-            echo -e "${YELLOW}      - $final_ip${NC}"
-        done
-        
-        echo
-        echo -e "${WHITE}4.${NC} Dosyayı kaydet: ${BLUE}Ctrl+X, Y, Enter${NC}"
-        echo -e "${WHITE}5.${NC} Netplan'ı uygula: ${BLUE}sudo netplan apply${NC}"
-        echo
-        
-        echo -e "${RED}⚠️  DİKKAT:${NC}"
-        echo -e "${WHITE}• Girinti (indentation) çok önemli!${NC}"
-        echo -e "${WHITE}• Mevcut IP'lerle aynı hizada olmalı${NC}"
-        echo -e "${WHITE}• YAML syntax'ını bozmayın${NC}"
-        
-    else
-        error "Netplan dosyası bulunamadı!"
+    if [[ -z "$total_ips" || "$total_ips" -eq 0 ]]; then
+        echo "0:0"
+        return 1
     fi
     
-    echo
-    read -p "Devam etmek için Enter'a basın..."
+    local max_proxies=$((total_ips * proxies_per_ip))
+    local end_port=$((start_port + max_proxies - 1))
+    
+    # Ensure we don't exceed 65535 port limit
+    if [ "$end_port" -gt 65535 ]; then
+        end_port=65535
+        max_proxies=$((end_port - start_port + 1))
+        warning "Port limiti aşıldı, maksimum $max_proxies proxy oluşturulabilir"
+    fi
+    
+    echo "$start_port:$end_port"
+    return 0
 }
 
-# Detect subnet for an IP address
+# Auto-calculate port settings for proxy modes
+get_proxy_port_info() {
+    local total_ips="$1"
+    
+    echo -e "${CYAN}🔌 Port Dağılımı:${NC}"
+    echo -e "${WHITE}• Ana sunucu IP: 3128 portu (sabit)${NC}"
+    
+    if [[ "$total_ips" -gt 1 ]]; then
+        local other_ips=$((total_ips - 1))
+        echo -e "${WHITE}• Diğer $other_ips IP: Sıralı portlar${NC}"
+        echo -e "${WHITE}• Her IP için 3 ardışık port${NC}"
+        echo -e "${WHITE}• Örnek: IP1(10000,10001,10002), IP2(10003,10004,10005)...${NC}"
+    fi
+    echo
+}
 
 show_manual_netplan_guide() {
     local missing_ips=("$@")
@@ -1125,9 +1162,24 @@ create_proxy_random() {
     echo "Dosya: $PROXY_LIST_FILE"
     echo
     
-    read -p "Başlangıç portu: " start_port
-    read -p "Bitiş portu: " end_port
+    # Auto-calculate recommended port range
+    port_range=$(calculate_port_range "$ip_count" 3 10000)
+    recommended_start=$(echo "$port_range" | cut -d':' -f1)
+    recommended_end=$(echo "$port_range" | cut -d':' -f2)
+    
+    echo -e "${GREEN}📊 Önerilen Port Aralığı:${NC}"
+    echo -e "${WHITE}• Ana IP (3128 portu sabit)${NC}"
+    echo -e "${WHITE}• Diğer IP'ler: $recommended_start-$recommended_end${NC}"
+    echo -e "${WHITE}• Maksimum: $((recommended_end - recommended_start + 1)) proxy${NC}"
+    echo
+    
+    read -p "Başlangıç portu [$recommended_start]: " start_port
+    read -p "Bitiş portu [$recommended_end]: " end_port
     read -p "HTTP (h) veya SOCKS5 (s) [h/s]: " proxy_type
+    
+    # Use recommended values if empty
+    [[ -z "$start_port" ]] && start_port=$recommended_start
+    [[ -z "$end_port" ]] && end_port=$recommended_end
     
     if [[ ! "$start_port" =~ ^[0-9]+$ ]] || [[ ! "$end_port" =~ ^[0-9]+$ ]]; then
         error "Geçersiz port numarası"
@@ -1267,10 +1319,25 @@ create_proxy_fixed() {
     echo "Dosya: $PROXY_LIST_FILE"
     echo
     
-    read -p "Başlangıç portu: " start_port
-    read -p "Bitiş portu: " end_port
+    # Auto-calculate recommended port range
+    port_range=$(calculate_port_range "$ip_count" 3 10000)
+    recommended_start=$(echo "$port_range" | cut -d':' -f1)
+    recommended_end=$(echo "$port_range" | cut -d':' -f2)
+    
+    echo -e "${GREEN}📊 Önerilen Port Aralığı:${NC}"
+    echo -e "${WHITE}• Ana IP (3128 portu sabit)${NC}"
+    echo -e "${WHITE}• Diğer IP'ler: $recommended_start-$recommended_end${NC}"
+    echo -e "${WHITE}• Maksimum: $((recommended_end - recommended_start + 1)) proxy${NC}"
+    echo
+    
+    read -p "Başlangıç portu [$recommended_start]: " start_port
+    read -p "Bitiş portu [$recommended_end]: " end_port
     read -p "Kullanıcı adı: " fixed_user
     read -p "Şifre: " fixed_pass
+    
+    # Use recommended values if empty
+    [[ -z "$start_port" ]] && start_port=$recommended_start
+    [[ -z "$end_port" ]] && end_port=$recommended_end
     read -p "HTTP (h) veya SOCKS5 (s) [h/s]: " proxy_type
     
     if [[ ! "$start_port" =~ ^[0-9]+$ ]] || [[ ! "$end_port" =~ ^[0-9]+$ ]]; then
@@ -1409,9 +1476,24 @@ create_proxy_public() {
     echo "Dosya: $PROXY_LIST_FILE"
     echo
     
-    read -p "Başlangıç portu: " start_port
-    read -p "Bitiş portu: " end_port
+    # Auto-calculate recommended port range
+    port_range=$(calculate_port_range "$ip_count" 3 10000)
+    recommended_start=$(echo "$port_range" | cut -d':' -f1)
+    recommended_end=$(echo "$port_range" | cut -d':' -f2)
+    
+    echo -e "${GREEN}📊 Önerilen Port Aralığı:${NC}"
+    echo -e "${WHITE}• Ana IP (3128 portu sabit)${NC}"
+    echo -e "${WHITE}• Diğer IP'ler: $recommended_start-$recommended_end${NC}"
+    echo -e "${WHITE}• Maksimum: $((recommended_end - recommended_start + 1)) proxy${NC}"
+    echo
+    
+    read -p "Başlangıç portu [$recommended_start]: " start_port
+    read -p "Bitiş portu [$recommended_end]: " end_port
     read -p "HTTP (h) veya SOCKS5 (s) [h/s]: " proxy_type
+    
+    # Use recommended values if empty
+    [[ -z "$start_port" ]] && start_port=$recommended_start
+    [[ -z "$end_port" ]] && end_port=$recommended_end
     
     if [[ ! "$start_port" =~ ^[0-9]+$ ]] || [[ ! "$end_port" =~ ^[0-9]+$ ]]; then
         error "Geçersiz port numarası"
@@ -1544,14 +1626,30 @@ create_proxy_maximum() {
         return 1
     fi
     
-    # Calculate maximum proxies (3 per IP)
-    max_proxies=$((total_ips * 3))
-    start_port=10000
-    end_port=$((start_port + max_proxies - 1))
+    # Auto-calculate optimal port range
+    port_range=$(calculate_port_range "$total_ips" 3 10000)
+    start_port=$(echo "$port_range" | cut -d':' -f1)
+    end_port=$(echo "$port_range" | cut -d':' -f2)
+    
+    if [[ "$start_port" == "0" ]]; then
+        error "Port hesaplama hatası"
+        return 1
+    fi
+    
+    max_proxies=$((end_port - start_port + 1))
     
     log "Toplam IP sayısı: $total_ips"
-    log "Maksimum proxy sayısı: $max_proxies"
-    log "Port aralığı: $start_port-$end_port"
+    log "Otomatik hesaplanan port aralığı: $start_port-$end_port"
+    log "Maksimum proxy sayısı: $max_proxies (IP başına 3 proxy)"
+    
+    # Show port distribution info
+    get_proxy_port_info "$total_ips"
+    
+    echo -e "${GREEN}📊 Otomatik Port Hesaplama:${NC}"
+    echo -e "${WHITE}• Ana sunucu IP: 3128 portu${NC}"
+    echo -e "${WHITE}• Diğer IP'ler: $start_port-$end_port portları${NC}"
+    echo -e "${WHITE}• Her IP için 3 sıralı port${NC}"
+    echo -e "${WHITE}• Toplam: $max_proxies proxy${NC}"
     
     if [[ "$auth_mode" == "f" ]]; then
         read -p "Kullanıcı adı: " fixed_user

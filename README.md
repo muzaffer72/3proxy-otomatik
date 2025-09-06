@@ -65,12 +65,12 @@ sudo ./3proxy_menu.sh --install
 ### 🎮 **Kurulum Sonrası Kullanım**
 ```bash
 # Herhangi bir yerden kısa komut (YENİ!)
-sudo menu
+menu
 
 # Diğer global komutlar
-sudo 3proxy              # Ana komut
-sudo proxy-menu          # Alternatif
-sudo 3proxy-manager      # Tam komut
+3proxy                   # Ana komut
+proxy-menu              # Alternatif
+3proxy-manager          # Tam komut
 
 # Veya doğrudan script ile
 sudo /opt/3proxy-elite/3proxy_menu.sh
