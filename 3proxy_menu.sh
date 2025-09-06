@@ -97,7 +97,7 @@ install_system() {
     read -p "Şimdi ana menüyü başlatmak istiyor musunuz? [y/N]: " start_now
 
     if [[ "$start_now" =~ ^[Yy] ]]; then
-        exec "$install_dir/3proxy_menu.sh"
+        exec "3proxy_menu.sh"
     else
         echo -e "${GREEN}Menü başlatmak için herhangi bir yerden: ${BLUE}sudo menu${NC}"
     fi
