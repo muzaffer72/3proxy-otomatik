@@ -1,71 +1,78 @@
-# 3proxy Elite Anonymous Proxy Installer
+Gönderdiğiniz metin, "3proxy Elite Anonymous Proxy Installer" adlı bir betiğin Çince hazırlanmış dokümantasyonudur. Bu betik, yüksek anonimliğe sahip bir proxy sunucusunu tek komutla kurmayı amaçlıyor.
 
-简单有效的3proxy精英级高匿名代理一键安装脚本。
+İşte metnin Türkçe çevirisi:
 
-## 特性
+-----
 
-- ✅ **精英级高匿名代理** - 使用`-a1 -n`参数确保无VIA和X-Forwarded头部
-- ✅ **一键安装** - 自动检测环境、编译、安装、配置
-- ✅ **固定认证** - 用户名: neonlink, 密码: meshnova
-- ✅ **多协议支持** - HTTP(3128)、SOCKS5(1080)、Web管理(8080)
-- ✅ **跨平台兼容** - 支持Ubuntu、CentOS、Alpine等
+### **3proxy Elit Anonim Proxy Kurulum Betiği**
 
-## 使用方法
+Basit ve etkili, elit seviye yüksek anonimliğe sahip bir 3proxy kurulum betiği.
+
+#### **Özellikler**
+
+  * ✅ **Elit Seviye Yüksek Anonimlik** - `-a1` ve `-n` parametrelerini kullanarak **VIA** ve **X-Forwarded** başlıklarının gönderilmemesini sağlar.
+  * ✅ **Tek Tıkla Kurulum** - Ortamı otomatik olarak algılar, derler, kurar ve yapılandırır.
+  * ✅ **Sabit Kimlik Doğrulama** - Kullanıcı adı: `neonlink`, şifre: `meshnova`.
+  * ✅ **Çoklu Protokol Desteği** - HTTP (3128), SOCKS5 (1080) ve Web Yönetim (8080) portlarını destekler.
+  * ✅ **Platformlar Arası Uyumluluk** - Ubuntu, CentOS, Alpine gibi işletim sistemlerini destekler.
+
+#### **Kullanım Yöntemleri**
 
 ```bash
-# 下载并执行
-curl -sL https://raw.githubusercontent.com/Deroino/3proxy-installer/master/install_3proxy.sh | sudo bash
+# İndir ve Çalıştır
+curl -sL https://raw.githubusercontent.com/muzaffer72/3proxy-otomatik/master/install_3proxy.sh | sudo bash
 
-# 或者手动下载
-wget https://raw.githubusercontent.com/Deroino/3proxy-installer/master/install_3proxy.sh
+# Veya Manuel İndir
+wget https://raw.githubusercontent.com/muzaffer72/3proxy-otomatik/master/install_3proxy.sh
 chmod +x install_3proxy.sh
 sudo ./install_3proxy.sh
 ```
 
-## 代理配置
+#### **Proxy Yapılandırması**
 
-安装完成后可使用以下配置：
+Kurulum tamamlandıktan sonra aşağıdaki ayarları kullanabilirsiniz:
 
-- **HTTP代理**: `YOUR_SERVER_IP:3128`
-- **SOCKS5代理**: `YOUR_SERVER_IP:1080` 
-- **Web管理界面**: `YOUR_SERVER_IP:8080`
+  * **HTTP Proxy**: `SUNUCU_IP_ADRESINIZ:3128`
+  * **SOCKS5 Proxy**: `SUNUCU_IP_ADRESINIZ:1080`
+  * **Web Yönetim Arayüzü**: `SUNUCU_IP_ADRESINIZ:8080`
 
-**认证信息**:
-- 用户名: `neonlink`
-- 密码: `meshnova`
+**Kimlik Doğrulama Bilgileri**:
 
-## 使用示例
+  * Kullanıcı Adı: `onvaonet`
+  * Şifre: `onvaonet`
+
+#### **Kullanım Örnekleri**
 
 ```bash
-# HTTP代理测试
-curl -x neonlink:meshnova@YOUR_SERVER_IP:3128 http://httpbin.org/ip
+# HTTP Proxy Testi
+curl -x onvaonet:onvaonet@SUNUCU_IP_ADRESINIZ:3128 http://httpbin.org/ip
 
-# SOCKS5代理测试
-curl --socks5 neonlink:meshnova@YOUR_SERVER_IP:1080 http://httpbin.org/ip
+# SOCKS5 Proxy Testi
+curl --socks5  onvaonet:onvaonet@SUNUCU_IP_ADRESINIZ:1080 http://httpbin.org/ip
 
-# 匿名性测试
-curl -x neonlink:meshnova@YOUR_SERVER_IP:3128 http://httpbin.org/headers
+# Anonimlik Testi
+curl -x  onvaonet:onvaonet@SUNUCU_IP_ADRESINIZ:3128 http://httpbin.org/headers
 ```
 
-## 管理命令
+#### **Yönetim Komutları**
 
 ```bash
-# 服务控制
+# Servis Kontrolü
 systemctl start 3proxy
 systemctl stop 3proxy
 systemctl restart 3proxy
 systemctl status 3proxy
 
-# 配置文件
-/etc/3proxy/3proxy.cfg                  # 主配置
-/usr/local/3proxy/conf/3proxy.cfg       # 详细配置
-/usr/local/3proxy/conf/passwd           # 用户认证
+# Yapılandırma Dosyaları
+/etc/3proxy/3proxy.cfg                  # Ana yapılandırma
+/usr/local/3proxy/conf/3proxy.cfg       # Detaylı yapılandırma
+/usr/local/3proxy/conf/passwd           # Kullanıcı kimlik doğrulama
 ```
 
-## 高匿名特性
+#### **Yüksek Anonimlik Özellikleri**
 
-- ✅ 启用`-a1`参数（随机化客户端信息）
-- ✅ 启用`-n`参数（无日志记录客户端IP）
-- ✅ 无HTTP_VIA头部
-- ✅ 无HTTP_X_FORWARDED_FOR头部
-- ✅ 精英级高匿名代理
+  * ✅ `-a1` parametresi etkinleştirilmiştir (istemci bilgilerini rastgeleleştirir).
+  * ✅ `-n` parametresi etkinleştirilmiştir (istemci IP'sinin loglanmasını engeller).
+  * ✅ HTTP **VIA** başlığı yoktur.
+  * ✅ HTTP **X-FORWARDED\_FOR** başlığı yoktur.
+  * ✅ Elit seviye yüksek anonim proxy sağlar.
