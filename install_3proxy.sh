@@ -5,8 +5,8 @@
 set -e
 
 # Configuration
-PROXY_USER="neonlink"
-PROXY_PASS="meshnova"
+PROXY_USER="onvaonet"
+PROXY_PASS="onvaonet"
 VERSION="0.9.3"
 
 # Colors
@@ -20,7 +20,7 @@ error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
 # Check root
 [[ $EUID -eq 0 ]] || error "Run as root: sudo $0"
 
-log "Installing dependencies..."
+log "bağımlılıklar yükleniyor..."
 if command -v apt >/dev/null; then
     apt update -qq && apt install -y wget curl gcc make build-essential procps net-tools
 elif command -v yum >/dev/null; then
@@ -28,10 +28,10 @@ elif command -v yum >/dev/null; then
 elif command -v apk >/dev/null; then
     apk update && apk add --no-cache wget curl gcc make musl-dev procps net-tools
 else
-    error "Unsupported package manager"
+    error "desteklenmeyen paket yöneticisi"
 fi
 
-log "Downloading and compiling 3proxy..."
+log "3proxy indirilip derleniyor..."
 cd /tmp
 wget -q "https://github.com/3proxy/3proxy/archive/${VERSION}.tar.gz"
 tar -xzf "${VERSION}.tar.gz"
@@ -53,7 +53,7 @@ ln -sf /usr/local/3proxy/bin/3proxy /usr/local/bin/3proxy
 # Create user
 id proxy >/dev/null 2>&1 || useradd -r -s /bin/false proxy
 
-log "Creating configuration..."
+log "Konfigurasyon dosyası oluşturuluyor..."
 # Main config
 cat > /etc/3proxy/3proxy.cfg << 'EOF'
 #!/usr/local/bin/3proxy
