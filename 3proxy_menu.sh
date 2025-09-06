@@ -276,11 +276,9 @@ test_proxy_speed() {
     
     if [[ -n "$username" ]] && [[ -n "$password" ]]; then
         # Authenticated proxy
-        echo "DEBUG: Testing with auth: $username:***@$ip:$port" >&2
         test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$username:$password@$ip:$port" https://passo.com.tr 2>/dev/null)
     else
         # Public proxy (no authentication)
-        echo "DEBUG: Testing without auth: $ip:$port" >&2
         test_result=$(timeout 15 curl -s -w "%{http_code}|%{time_total}" --proxy "$ip:$port" https://passo.com.tr 2>/dev/null)
     fi
     
@@ -302,8 +300,6 @@ test_proxy_speed() {
             # Alternative without bc: use awk or simple multiplication
             ms_time=$(awk "BEGIN {printf \"%.0f\", $curl_time * 1000}" 2>/dev/null || echo "$total_time")
         fi
-        
-        echo "DEBUG: HTTP Code: $http_code, Time: ${curl_time}s, MS: ${ms_time}ms" >&2
         
         # Check for valid HTTP codes (000 means proxy connection failed)
         if [[ "$http_code" == "000" ]]; then
@@ -531,9 +527,6 @@ test_proxy_speeds() {
         
         ((tested_count++))
         
-        # DEBUG: Show what we're processing
-        log "Processing proxy line $tested_count: $proxy_line"
-        
         # Parse different proxy formats to extract IP and port for display
         local expected_ip port
         
@@ -560,6 +553,7 @@ test_proxy_speeds() {
         
         printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
         
+        # Always show the test attempt, even if it fails
         if speed_result=$(test_proxy_speed "$proxy_line" "$expected_ip" 2>&1); then
             local ms_time=$(echo "$speed_result" | cut -d'|' -f1)
             local status=$(echo "$speed_result" | cut -d'|' -f2)
@@ -579,15 +573,18 @@ test_proxy_speeds() {
             fi
         else
             local result_code=$?
+            ((error_count++))
             if [[ $result_code -eq 3 ]]; then
                 # IP list format detected - show as skipped
-                printf "${YELLOW}%-8s ${YELLOW}%-15s${NC}\n" "SKIP" "IP-LİSTE-FORMAT"
+                printf "${YELLOW}%-8s ${YELLOW}%-15s${NC}\n" "SKIP" "IP-FORMAT"
             elif [[ $result_code -eq 2 ]]; then
                 ((timeout_count++))
-                printf "${RED}%-8s ${RED}%-15s${NC}\n" "TIMEOUT" "BAĞLANAMADI"
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "TIMEOUT" "ZAMAN AŞIMI"
+            elif [[ $result_code -eq 4 ]]; then
+                # Connection failed
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "CONN" "BAĞLANTI-HATA"
             else
-                ((error_count++))
-                printf "${RED}%-8s ${RED}%-15s${NC}\n" "ERROR" "BAŞARISIZ"
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "ERROR" "TEST-BAŞARISIZ"
             fi
         fi
         
