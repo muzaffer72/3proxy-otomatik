@@ -236,8 +236,79 @@ test_proxy_speed() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # DEBUG: Show input
-    echo "DEBUG: Testing proxy: $proxy_line" >&2
+    # Parse different proxy formats (support subnet notation)
+    local ip port username password
+    
+    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
+        username="${BASH_REMATCH[1]}"
+        password="${BASH_REMATCH[2]}"
+        ip="${BASH_REMATCH[3]}"  # IP without subnet
+        port="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+        # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
+        username="${BASH_REMATCH[4]}"
+        password="${BASH_REMATCH[5]}"
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+        # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
+        ip="${BASH_REMATCH[1]}"  # IP without subnet
+        port="${BASH_REMATCH[3]}"
+        username=""
+        password=""
+    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?$ ]]; then
+        # Format: IP/SUBNET only (IP list, not proxy list) - Skip testing
+        echo "0|IP_LIST_FORMAT"
+        return 3
+    else
+        echo "0|FORMAT_ERROR"
+        return 1
+    fi
+    
+    # Test proxy with httpbin.org/ip to verify actual exit IP
+    local start_time=$(date +%s%3N)
+    local test_result
+    
+    if [[ -n "$username" ]] && [[ -n "$password" ]]; then
+        # Authenticated proxy - test IP verification
+        test_result=$(timeout 15 curl -s --proxy "$username:$password@$ip:$port" http://httpbin.org/ip 2>/dev/null)
+    else
+        # Public proxy (no authentication)
+        test_result=$(timeout 15 curl -s --proxy "$ip:$port" http://httpbin.org/ip 2>/dev/null)
+    fi
+    
+    local curl_exit_code=$?
+    local end_time=$(date +%s%3N)
+    local total_time=$((end_time - start_time))
+    
+    if [[ $curl_exit_code -eq 0 ]] && [[ -n "$test_result" ]]; then
+        # Parse IP from httpbin response: {"origin": "1.2.3.4"}
+        local actual_ip=$(echo "$test_result" | grep -o '"origin"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        
+        if [[ -n "$actual_ip" ]]; then
+            # Check if actual IP matches expected IP
+            if [[ "$actual_ip" == "$ip" ]]; then
+                echo "$total_time|ÇALIŞIYOR|$actual_ip"
+                return 0
+            else
+                echo "$total_time|YANLIŞ_IP|$actual_ip"
+                return 5
+            fi
+        else
+            echo "$total_time|PARSE_ERROR"
+            return 1
+        fi
+    elif [[ $curl_exit_code -eq 28 ]]; then
+        # Timeout
+        echo "$total_time|TIMEOUT"
+        return 2
+    else
+        # Connection failed
+        echo "$total_time|PROXY_CONNECTION_FAILED"
+        return 4
+    fi
+}
     
     # Parse different proxy formats (support subnet notation)
     local ip port username password
@@ -497,11 +568,12 @@ test_proxy_speeds() {
     local error_count=0
     
     print_header
-    echo -e "${CYAN}🚀 PROXY HIZ TESTİ - PASSO.COM.TR${NC}"
+    echo -e "${CYAN}🚀 PROXY HIZ TESTİ - IP DOĞRULAMA${NC}"
     echo "=============================================="
     echo -e "${WHITE}Proxy Dosyası: ${BLUE}$proxy_file${NC}"
     echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
-    echo -e "${WHITE}Test Sitesi: ${BLUE}https://passo.com.tr${NC}"
+    echo -e "${WHITE}Test URL: ${BLUE}http://httpbin.org/ip${NC}"
+    echo -e "${WHITE}Doğrulama: Çıkış IP = Proxy IP${NC}"
     
     if [[ "$is_ip_list" == "true" ]]; then
         echo -e "${YELLOW}⚠️  UYARI: Bu bir IP listesi, Proxy listesi değil!${NC}"
@@ -517,8 +589,8 @@ test_proxy_speeds() {
     
     echo -e "${YELLOW}Proxy'ler test ediliyor...${NC}"
     echo
-    printf "%-4s %-15s %-6s %-8s %-15s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
-    echo "------------------------------------------------------------"
+    printf "%-4s %-15s %-6s %-8s %-25s\n" "NO" "IP" "PORT" "HIZ(ms)" "DURUM"
+    echo "------------------------------------------------------------------------"
     
     while IFS= read -r proxy_line; do
         if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]]; then
@@ -557,16 +629,20 @@ test_proxy_speeds() {
         if speed_result=$(test_proxy_speed "$proxy_line" "$expected_ip" 2>&1); then
             local ms_time=$(echo "$speed_result" | cut -d'|' -f1)
             local status=$(echo "$speed_result" | cut -d'|' -f2)
+            local actual_ip=$(echo "$speed_result" | cut -d'|' -f3)
             
             if [[ "$status" == "ÇALIŞIYOR" ]]; then
                 ((working_count++))
                 if [[ $ms_time -lt 1000 ]]; then
-                    printf "${GREEN}%-8s ${GREEN}%-15s${NC}\n" "${ms_time}ms" "$status"
+                    printf "${GREEN}%-8s ${GREEN}✅ DOĞRU (${actual_ip})${NC}\n" "${ms_time}ms"
                 elif [[ $ms_time -lt 3000 ]]; then
-                    printf "${YELLOW}%-8s ${YELLOW}%-15s${NC}\n" "${ms_time}ms" "$status"
+                    printf "${YELLOW}%-8s ${GREEN}✅ DOĞRU (${actual_ip})${NC}\n" "${ms_time}ms"
                 else
-                    printf "${RED}%-8s ${YELLOW}%-15s${NC}\n" "${ms_time}ms" "$status"
+                    printf "${RED}%-8s ${GREEN}✅ DOĞRU (${actual_ip})${NC}\n" "${ms_time}ms"
                 fi
+            elif [[ "$status" == "YANLIŞ_IP" ]]; then
+                ((error_count++))
+                printf "${RED}%-8s ${RED}❌ YANLIŞ-IP (${actual_ip})${NC}\n" "${ms_time}ms"
             else
                 ((error_count++))
                 printf "${RED}%-8s ${RED}%-15s${NC}\n" "${ms_time}ms" "$status"
@@ -583,6 +659,9 @@ test_proxy_speeds() {
             elif [[ $result_code -eq 4 ]]; then
                 # Connection failed
                 printf "${RED}%-8s ${RED}%-15s${NC}\n" "CONN" "BAĞLANTI-HATA"
+            elif [[ $result_code -eq 5 ]]; then
+                # Wrong IP detected
+                printf "${RED}%-8s ${RED}%-15s${NC}\n" "IP" "YANLIŞ-IP"
             else
                 printf "${RED}%-8s ${RED}%-15s${NC}\n" "ERROR" "TEST-BAŞARISIZ"
             fi

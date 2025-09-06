@@ -1,7 +1,0 @@
-# IP Listesi - Subnet bilgileri ile (Sadece netplan için kullanılacak)
-176.100.36.39/24
-176.100.36.44/24
-45.90.98.32/23
-45.90.98.33/23
-45.90.98.34/23
-45.90.98.35/23
