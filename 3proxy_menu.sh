@@ -2,7 +2,7 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.3.1
+# Version: 2.3.2
 
 set -e
 
@@ -13,7 +13,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.3.1"
+VERSION="2.3.2"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
@@ -693,15 +693,35 @@ configure_netplan() {
     echo
     echo -e "${YELLOW}Eksik IP Adresleri:${NC}"
     for ip in "${missing_ips[@]}"; do
-        echo -e "${RED}  ❌ $ip${NC}"
+        local display_ip="$ip"
+        if [[ "$ip" != *"/"* ]]; then
+            local detected_subnet=$(detect_subnet_for_ip "$ip")
+            display_ip="$ip$detected_subnet"
+        fi
+        echo -e "${RED}  ❌ $display_ip${NC}"
     done
     echo
     
-    read -p "Eksik IP'leri netplan'a eklemek istiyor musunuz? [y/N]: " add_ips
-    if [[ ! "$add_ips" =~ ^[Yy] ]]; then
-        warning "Netplan güncellemesi atlandı"
-        return 1
-    fi
+    echo -e "${CYAN}Netplan güncelleme seçenekleri:${NC}"
+    echo -e "${WHITE}1.${NC} Otomatik ekleme dene (önerilen)"
+    echo -e "${WHITE}2.${NC} Manuel ekleme kılavuzu göster"  
+    echo -e "${WHITE}3.${NC} Atla ve devam et"
+    echo
+    read -p "Seçiminiz [1/2/3]: " update_choice
+    
+    case "$update_choice" in
+        2)
+            show_manual_netplan_guide "${missing_ips[@]}"
+            return 1
+            ;;
+        3)
+            warning "Netplan güncellemesi atlandı"
+            return 1
+            ;;
+        *)
+            log "Otomatik netplan güncellemesi deneniyor..."
+            ;;
+    esac
     
     # Find primary netplan file (first one)
     primary_yaml="${yaml_files[0]}"
@@ -734,95 +754,145 @@ configure_netplan() {
             log "  ✅ $ip_to_add eklendi (otomatik tespit edilen subnet)"
         fi
         
-        # Safer approach: Add IP with proper YAML indentation detection
+        # Safer approach: Add IP with intelligent method selection
         if grep -q "addresses:" "$temp_yaml"; then
-            # Use Python to safely add IP to YAML file
-            python3 -c "
-import yaml
-import sys
-
-yaml_file = '$temp_yaml'
-ip_to_add = '$ip_to_add'
-
-try:
-    with open(yaml_file, 'r') as f:
-        data = yaml.safe_load(f)
-    
-    # Navigate to network configuration
-    if 'network' in data and 'ethernets' in data['network']:
-        for interface in data['network']['ethernets'].values():
-            if 'addresses' in interface:
-                if ip_to_add not in interface['addresses']:
-                    interface['addresses'].append(ip_to_add)
-                break
-    
-    # Write back to file with proper formatting
-    with open(yaml_file, 'w') as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-    
-    print('IP_ADDED_SUCCESS')
-except Exception as e:
-    print(f'IP_ADD_ERROR: {e}')
-" 2>&1
-            local add_result=$?
+            # Method 1: Try simple append with proper spacing detection
+            local addresses_line_num=$(grep -n "addresses:" "$temp_yaml" | head -1 | cut -d: -f1)
+            local next_line_num=$((addresses_line_num + 1))
             
-            if [[ $add_result -eq 0 ]]; then
-                log "  ✅ $ip_to_add Python ile güvenli şekilde eklendi"
-            else
-                # Fallback to sed method with better indentation detection
-                local indent_line=$(grep -n "addresses:" "$temp_yaml" | head -1 | cut -d: -f1)
-                local next_line=$((indent_line + 1))
-                local existing_indent=$(sed -n "${next_line}p" "$temp_yaml" | sed 's/[^[:space:]].*//' 2>/dev/null || echo "        ")
+            # Check if there are existing addresses to match indentation
+            if sed -n "${next_line_num}p" "$temp_yaml" | grep -q "^[[:space:]]*-"; then
+                # Get existing indentation from first address entry
+                local existing_indent=$(sed -n "${next_line_num}p" "$temp_yaml" | sed 's/-.*$//' | cat -A | sed 's/\$$//g')
+                local clean_indent=$(echo "$existing_indent" | tr '^I' '\t' | tr '$' '')
                 
-                sed -i "/addresses:/a\\${existing_indent}- $ip_to_add" "$temp_yaml"
-                log "  ✅ $ip_to_add sed ile eklendi (fallback method)"
+                # Add new IP with same indentation pattern
+                sed -i "${addresses_line_num}a\\${clean_indent}- ${ip_to_add}" "$temp_yaml"
+                log "  ✅ $ip_to_add eklendi (existing indent matched)"
+            else
+                # No existing addresses, add with standard indentation
+                sed -i "/addresses:/a\\        - ${ip_to_add}" "$temp_yaml"
+                log "  ✅ $ip_to_add eklendi (standard indent)"
             fi
         else
-            warning "  ❌ addresses section bulunamadı: $ip_to_add"
+            # No addresses section exists, need to create it
+            warning "  ❌ addresses section bulunamadı, manuel ekleme gerekli: $ip_to_add"
+            echo -e "${YELLOW}    Manuel olarak şu satırı ekleyin:${NC}"
+            echo -e "${WHITE}    addresses:${NC}"
+            echo -e "${WHITE}      - $ip_to_add${NC}"
         fi
     done
     
-    # Enhanced YAML validation with error reporting
-    yaml_error=$(python3 -c "
-import yaml
-import sys
-try:
-    with open('$temp_yaml', 'r') as f:
-        yaml.safe_load(f)
-    print('YAML_VALID')
-except yaml.YAMLError as e:
-    print(f'YAML_ERROR: {e}')
-except Exception as e:
-    print(f'GENERAL_ERROR: {e}')
-" 2>&1)
+    # Simplified YAML validation
+    log "YAML syntax kontrol ediliyor..."
     
-    if [[ "$yaml_error" == "YAML_VALID" ]]; then
-        # Apply the changes
+    if python3 -c "import yaml; yaml.safe_load(open('$temp_yaml'))" 2>/dev/null; then
+        # YAML is valid, apply changes
         cp "$temp_yaml" "$primary_yaml"
         success "Netplan konfigürasyonu güncellendi"
         
-        # Apply netplan
-        log "Netplan uygulanıyor..."
-        if netplan apply 2>/dev/null; then
+        # Test netplan configuration before applying
+        log "Netplan konfigürasyonu test ediliyor..."
+        if netplan try --timeout=10 2>/dev/null; then
             success "Netplan başarıyla uygulandı"
         else
-            error "Netplan uygulanamadı, yedekten geri yükleniyor..."
-            cp "$backup_file" "$primary_yaml"
-            netplan apply
-            return 1
+            # If netplan try fails, apply anyway but warn user
+            warning "Netplan test edilemedi, direkt uygulanıyor..."
+            if netplan apply 2>/dev/null; then
+                success "Netplan uygulandı (test atlandı)"
+            else
+                error "Netplan uygulanamadı, yedekten geri yükleniyor..."
+                cp "$backup_file" "$primary_yaml"
+                netplan apply 2>/dev/null || true
+                return 1
+            fi
         fi
     else
-        error "YAML syntax hatası tespit edildi:"
-        echo -e "${RED}$yaml_error${NC}"
+        # YAML syntax error
+        error "YAML syntax hatası tespit edildi!"
+        echo -e "${RED}Hata detayları:${NC}"
+        python3 -c "import yaml; yaml.safe_load(open('$temp_yaml'))" 2>&1 || true
+        echo
         error "Değişiklikler uygulanamadı, orijinal dosya korundu"
-        echo -e "${YELLOW}💡 Manuel düzenleme önerisi:${NC}"
-        echo -e "${WHITE}   1. sudo nano $primary_yaml${NC}"
-        echo -e "${WHITE}   2. addresses: bölümünü kontrol edin${NC}"
-        echo -e "${WHITE}   3. Indentation (girinti) hatalarını düzeltin${NC}"
+        echo -e "${YELLOW}💡 Çözüm önerileri:${NC}"
+        echo -e "${WHITE}   1. IP'leri tek tek manuel ekleyin${NC}"
+        echo -e "${WHITE}   2. sudo nano $primary_yaml${NC}"  
+        echo -e "${WHITE}   3. addresses: altına şu formatla ekleyin:${NC}"
+        echo -e "${WHITE}        - IP_ADRESI/SUBNET${NC}"
+        
+        # Show what would be added manually
+        echo
+        echo -e "${CYAN}Manuel eklenecek IP'ler:${NC}"
+        for ip_entry in "${missing_ips[@]}"; do
+            local final_ip="$ip_entry"
+            if [[ "$ip_entry" != *"/"* ]]; then
+                detected_subnet=$(detect_subnet_for_ip "$ip_entry")
+                final_ip="$ip_entry$detected_subnet"
+            fi
+            echo -e "${YELLOW}        - $final_ip${NC}"
+        done
+        
         return 1
     fi
     
     return 0
+}
+
+show_manual_netplan_guide() {
+    local missing_ips=("$@")
+    
+    print_header
+    echo -e "${CYAN}📋 MANUEL NETPLAN GÜNCELLEMESİ KILAVUZU${NC}"
+    echo "==========================================="
+    echo
+    
+    # Find primary netplan file
+    local yaml_files=($(find /etc/netplan -name "*.yaml" -o -name "*.yml" 2>/dev/null))
+    local primary_yaml="${yaml_files[0]}"
+    
+    if [[ -n "$primary_yaml" ]]; then
+        echo -e "${WHITE}📁 Düzenlenecek Dosya:${NC} $primary_yaml"
+        echo
+        echo -e "${YELLOW}🔧 Adımlar:${NC}"
+        echo -e "${WHITE}1.${NC} Dosyayı düzenle: ${BLUE}sudo nano $primary_yaml${NC}"
+        echo -e "${WHITE}2.${NC} 'addresses:' bölümünü bul"
+        echo -e "${WHITE}3.${NC} Aşağıdaki IP'leri listeye ekle:"
+        echo
+        
+        echo -e "${GREEN}📝 Eklenecek IP Adresleri:${NC}"
+        echo -e "${BLUE}    addresses:${NC}"
+        
+        # Show existing addresses first
+        if grep -A 20 "addresses:" "$primary_yaml" 2>/dev/null | grep -E "^[[:space:]]*-" | head -3; then
+            echo -e "${GRAY}    # (mevcut adresler yukarıda)${NC}"
+        fi
+        
+        # Show new addresses to add
+        for ip_entry in "${missing_ips[@]}"; do
+            local final_ip="$ip_entry"
+            if [[ "$ip_entry" != *"/"* ]]; then
+                detected_subnet=$(detect_subnet_for_ip "$ip_entry")
+                final_ip="$ip_entry$detected_subnet"
+            fi
+            echo -e "${YELLOW}      - $final_ip${NC}"
+        done
+        
+        echo
+        echo -e "${WHITE}4.${NC} Dosyayı kaydet: ${BLUE}Ctrl+X, Y, Enter${NC}"
+        echo -e "${WHITE}5.${NC} Netplan'ı uygula: ${BLUE}sudo netplan apply${NC}"
+        echo
+        
+        echo -e "${RED}⚠️  DİKKAT:${NC}"
+        echo -e "${WHITE}• Girinti (indentation) çok önemli!${NC}"
+        echo -e "${WHITE}• Mevcut IP'lerle aynı hizada olmalı${NC}"
+        echo -e "${WHITE}• YAML syntax'ını bozmayın${NC}"
+        
+    else
+        error "Netplan dosyası bulunamadı!"
+    fi
+    
+    echo
+    read -p "Devam etmek için Enter'a basın..."
 }
 
 delete_proxy_list() {
