@@ -2,7 +2,15 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.4
+# Version: 3.0 - Major Update: Fixed Mode Enhanced, IP Validation, Menu Streamlined
+#
+# CHANGELOG v3.0:
+# - ✅ Fixed Mode: 1:1 IP-to-proxy mapping with sequential ports (3128, 3129, 3130...)
+# - ✅ Proxy Config: Added -e parameter for proper exit IP (each proxy uses its own IP)
+# - ✅ IP Validation: New httpbin.org/ip based testing for real IP verification
+# - ✅ Menu Streamlined: Hidden unused features, focused on core functionality
+# - ✅ Bug Fixes: Removed duplicate functions, fixed syntax errors
+# - ✅ File Selection: Dynamic proxy list selection for testing/validation
 
 set -e
 
@@ -13,7 +21,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.6"
+VERSION="3.0"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
@@ -3024,23 +3032,23 @@ show_main_menu() {
     echo -e "${CYAN} 1.${NC} İlk Kurulum (3proxy ve bağımlılıklar)"
     echo -e "${CYAN} 2.${NC} Proxy Listesi Oluştur/Düzenle"
     echo -e "${CYAN} 3.${NC} Proxy Listesini Sil"
-    echo -e "${CYAN} 4.${NC} Rastgele Mod Proxy Oluştur"
+    # echo -e "${CYAN} 4.${NC} Rastgele Mod Proxy Oluştur"           # GİZLENDİ
     echo -e "${CYAN} 5.${NC} Sabit Mod Proxy Oluştur"
-    echo -e "${CYAN} 6.${NC} Public Mod Proxy Oluştur"
-    echo -e "${CYAN} 7.${NC} Maksimum Proxy Modu"
+    # echo -e "${CYAN} 6.${NC} Public Mod Proxy Oluştur"             # GİZLENDİ  
+    # echo -e "${CYAN} 7.${NC} Maksimum Proxy Modu"                   # GİZLENDİ
     echo -e "${CYAN} 8.${NC} Proxy'leri Başlat"
     echo -e "${CYAN} 9.${NC} Proxy'leri Durdur"
     echo -e "${CYAN}10.${NC} Proxy'leri Yeniden Başlat"
-    echo -e "${CYAN}11.${NC} Port Aralığını Durdur"
+    # echo -e "${CYAN}11.${NC} Port Aralığını Durdur"                 # GİZLENDİ
     echo -e "${CYAN}12.${NC} Sunucudan IP Sil"
     echo -e "${CYAN}13.${NC} Proxy Durumu Görüntüle"
     echo -e "${CYAN}14.${NC} Firewall Durumu Kontrol Et"    
-    echo -e "${CYAN}15.${NC} Belirli Portları Aç"           
+    # echo -e "${CYAN}15.${NC} Belirli Portları Aç"                   # GİZLENDİ           
     echo -e "${CYAN}16.${NC} Güncellemeleri Kontrol Et"
-    echo -e "${CYAN}17.${NC} Log Görüntüle"
-    echo -e "${CYAN}18.${NC} Konfigürasyon Yönetimi"
-    echo -e "${CYAN}19.${NC} Proxy'leri Doğrula (Liste Seçimi)"
-    echo -e "${CYAN}20.${NC} Proxy Hız Testi (Liste Seçimi)"
+    # echo -e "${CYAN}17.${NC} Log Görüntüle"                         # GİZLENDİ
+    # echo -e "${CYAN}18.${NC} Konfigürasyon Yönetimi"                # GİZLENDİ
+    # echo -e "${CYAN}19.${NC} Proxy'leri Doğrula (Liste Seçimi)"     # GİZLENDİ
+    # echo -e "${CYAN}20.${NC} Proxy Hız Testi (Liste Seçimi)"        # GİZLENDİ
     echo -e "${CYAN}21.${NC} Sunucu Yeniden Kur"
     echo -e "${CYAN}22.${NC} 3proxy Kaldır"
     echo -e "${CYAN} 0.${NC} Çıkış"
@@ -3062,23 +3070,23 @@ main() {
             1) install_3proxy ;;
             2) setup_proxy_list ;;
             3) delete_proxy_list ;;
-            4) create_proxy_random ;;
+            4) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             5) create_proxy_fixed ;;
-            6) create_proxy_public ;;
-            7) create_proxy_maximum ;;
+            6) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
+            7) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             8) start_proxies ;;
             9) stop_proxies ;;
             10) restart_proxies ;;
-            11) stop_port_range ;;
+            11) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             12) remove_ip ;;
             13) show_proxy_status ;;
             14) check_firewall_status ;;
-            15) open_specific_ports ;;
+            15) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             16) check_updates ;;
-            17) view_logs ;;
-            18) manage_configs ;;
-            19) select_and_validate_proxy_list ;;
-            20) select_and_test_proxy_speeds ;;
+            17) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
+            18) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
+            19) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
+            20) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             21) reinstall_server ;;
             22) uninstall_3proxy ;;
             0) 
