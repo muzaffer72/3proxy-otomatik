@@ -13,7 +13,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.5"
+VERSION="2.6"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
