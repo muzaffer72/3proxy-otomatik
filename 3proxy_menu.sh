@@ -2,9 +2,15 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.6
+# Version: 2.4
 
 set -e
+
+# Check for install parameter
+if [[ "$1" == "--install" ]]; then
+    install_system
+    exit 0
+fi
 
 # Configuration
 VERSION="2.6"
@@ -30,7 +36,7 @@ install_system() {
     clear
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    ${GREEN}3PROXY ELITE MANAGER${BLUE}                         ║${NC}"
-    echo -e "${BLUE}║                    ${YELLOW}Global Command Setup${BLUE}                        ║${NC}"
+    echo -e "${BLUE}║                      ${YELLOW}System Installer${BLUE}                         ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
 
@@ -40,41 +46,38 @@ install_system() {
         exit 1
     fi
 
-    echo -e "${GREEN}[$(date +'%H:%M:%S')] Global menu komutları oluşturuluyor...${NC}"
-    echo
+    # Check system
+    if ! grep -q "Ubuntu" /etc/os-release 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Bu script Ubuntu 20.04+ için optimize edilmiştir${NC}"
+        read -p "Devam etmek istiyor musunuz? [y/N]: " continue_install
+        if [[ ! "$continue_install" =~ ^[Yy] ]]; then
+            exit 0
+        fi
+    fi
 
-    # Create installation directory for permanent storage
+    echo -e "${GREEN}[$(date +'%H:%M:%S')] 3proxy Elite Manager yükleniyor...${NC}"
+
+    # Create installation directory
     install_dir="/opt/3proxy-elite"
     mkdir -p "$install_dir"
     
     # Copy current script to installation directory
-    current_script="$(readlink -f "$0")"
-    cp "$current_script" "$install_dir/3proxy_menu.sh"
+    cp "$0" "$install_dir/3proxy_menu.sh"
     chmod +x "$install_dir/3proxy_menu.sh"
 
-    # Create global commands pointing to permanent location
+    # Create global commands with proper permissions
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-menu
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-manager
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-menu
     
-    # Verify installation
-    if command -v menu >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Global komutlar başarıyla oluşturuldu!${NC}"
-        echo
-        echo -e "${CYAN}🚀 Kullanabileceğiniz komutlar:${NC}"
-        echo -e "   ${BLUE}menu${NC}               # Ana menu (herhangi bir dizinden)"
-        echo -e "   ${BLUE}3proxy-menu${NC}        # Proxy menu sistemi" 
-        echo -e "   ${BLUE}proxy-manager${NC}      # Proxy yöneticisi"
-        echo
-        echo -e "${YELLOW}📋 Not: Tam kurulum için menüden '3proxy Kur' seçeneğini kullanın${NC}"
-        echo -e "${WHITE}Başlamak için: ${GREEN}menu${NC}"
-        echo
-        exit 0
-    else
-        echo -e "${RED}❌ Global komut oluşturma başarısız${NC}"
-        exit 1
-    fi
-}
+    # Ensure symlinks are executable
+    chmod +x /usr/local/bin/menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
+    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
+
+    echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
     echo
     echo -e "${CYAN}🔗 Test global komutları:${NC}"
     echo -e "   ${WHITE}which menu${NC} - Komut konumunu kontrol et"
@@ -97,7 +100,7 @@ install_system() {
     read -p "Şimdi ana menüyü başlatmak istiyor musunuz? [y/N]: " start_now
 
     if [[ "$start_now" =~ ^[Yy] ]]; then
-        exec "./3proxy_menu.sh"
+        exec "$install_dir/3proxy_menu.sh"
     else
         echo -e "${GREEN}Menü başlatmak için herhangi bir yerden: ${BLUE}sudo menu${NC}"
     fi
@@ -707,65 +710,30 @@ install_3proxy() {
     # Set permissions
     chown -R proxy:proxy /usr/local/3proxy /var/run/3proxy
     
-    # Create global menu commands for system-wide access
+    # Create global menu commands
     current_script_path=$(realpath "$0")
     
-    log "Global menu komutları oluşturuluyor..."
-    
     # Ensure script is executable
-    chmod +x "$current_script_path" || {
-        error "Script executable yapılamadı"
-        return 1
-    }
+    chmod +x "$current_script_path"
     
-    # Create a permanent installation directory
-    install_dir="/opt/3proxy-menu"
-    mkdir -p "$install_dir"
+    # Create symlinks with proper permissions
+    ln -sf "$current_script_path" /usr/local/bin/menu 2>/dev/null || true
+    ln -sf "$current_script_path" /usr/local/bin/3proxy 2>/dev/null || true  
+    ln -sf "$current_script_path" /usr/local/bin/proxy-menu 2>/dev/null || true
+    ln -sf "$current_script_path" /usr/local/bin/3proxy-manager 2>/dev/null || true
     
-    # Copy script to permanent location
-    cp "$current_script_path" "$install_dir/3proxy_menu.sh" || {
-        error "Script kopyalanmadı"
-        return 1
-    }
-    chmod +x "$install_dir/3proxy_menu.sh"
+    # Make symlinks executable
+    chmod +x /usr/local/bin/menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
+    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
+    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
     
-    # Create global symlinks pointing to permanent location
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu || {
-        warning "Menu komutu oluşturulamadı"
-    }
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-menu || {
-        warning "3proxy-menu komutu oluşturulamadı" 
-    }
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-manager || {
-        warning "Proxy-manager komutu oluşturulamadı"
-    }
-    
-    # Verify symlinks are working
-    if command -v menu >/dev/null 2>&1; then
-        success "Menu komutu başarıyla oluşturuldu: 'menu' komutunu kullanabilirsiniz"
-    else
-        warning "Menu komutu oluşturulamadı - manuel kurulum gerekebilir"
-    fi
-    
-    success "3proxy Elite Manager başarıyla kuruldu!"
-    echo
-    echo -e "${CYAN}🎯 KURULUM TAMAMLANDI${NC}"
-    echo "=========================="
-    echo -e "${GREEN}✅ 3proxy servisi kuruldu ve etkinleştirildi${NC}"
-    echo -e "${GREEN}✅ Global komutlar oluşturuldu${NC}"
-    echo -e "${GREEN}✅ Menu sistemi hazır${NC}"
-    echo
-    echo -e "${BLUE}🔧 Kullanabileceğiniz komutlar:${NC}"
-    echo -e "   ${WHITE}menu${NC}               # Ana menu (herhangi bir dizinden)"
-    echo -e "   ${WHITE}3proxy-menu${NC}        # Proxy menu sistemi"
-    echo -e "   ${WHITE}proxy-manager${NC}      # Proxy yöneticisi"
-    echo
-    echo -e "${YELLOW}📋 Kurulum sonrası yapılacaklar:${NC}"
-    echo -e "   1. ${WHITE}menu${NC} komutunu çalıştırın"
-    echo -e "   2. IP listesi oluşturun (otomatik olarak istenecek)"
-    echo -e "   3. Proxy tipini seçin ve oluşturun"
-    echo
-    echo -e "${GREEN}🚀 Başlamak için: ${WHITE}menu${NC}"
+    success "3proxy başarıyla kuruldu"
+    echo -e "${CYAN}💡 Global komutlar oluşturuldu:${NC}"
+    echo -e "   ${BLUE}menu${NC} - Herhangi bir yerden menüyü aç"
+    echo -e "   ${BLUE}3proxy${NC} - Ana komut"
+    echo -e "   ${BLUE}proxy-menu${NC} - Alternatif komut"
+    echo -e "   ${BLUE}3proxy-manager${NC} - Manager komutu"
     echo
     read -p "Press Enter to continue..."
 }
@@ -3003,8 +2971,4 @@ main() {
 }
 
 # Start the script
-if [[ "$1" == "--install" ]]; then
-    install_system
-else
-    main "$@"
-fi
+main "$@"
