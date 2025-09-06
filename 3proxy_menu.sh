@@ -1904,20 +1904,66 @@ start_proxies() {
     
     if systemctl is-active --quiet 3proxy; then
         success "Proxy'ler başarıyla başlatıldı"
+        echo
         
-        # Show listening ports
-        log "Aktif portlar:"
-        netstat -tlnp | grep 3proxy | head -10
+        # Show proxy configuration with IPs and ports
+        log "Aktif Proxy Konfigürasyonu:"
+        if [[ -f "${CONFIG_DIR}/3proxy.cfg" ]]; then
+            echo
+            echo -e "${CYAN}📋 IP:PORT Listesi:${NC}"
+            echo "================================"
+            
+            # Extract proxy configurations from config file
+            grep -E "^(proxy|socks)" "${CONFIG_DIR}/3proxy.cfg" 2>/dev/null | while read -r line; do
+                if [[ "$line" =~ ^(proxy|socks) ]]; then
+                    # Parse: proxy -a1 -n -i192.168.1.10 -p3128 or socks -i192.168.1.10 -p1080
+                    local type=$(echo "$line" | awk '{print $1}')
+                    local ip=$(echo "$line" | sed 's/.*-i\([0-9.]*\).*/\1/')
+                    local port=$(echo "$line" | sed 's/.*-p\([0-9]*\).*/\1/')
+                    
+                    if [[ -n "$ip" ]] && [[ -n "$port" ]] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                        echo -e "${YELLOW}${type^^}:${NC} ${WHITE}$ip:$port${NC}"
+                    fi
+                fi
+            done
+            
+            # Count total configured proxies
+            local total_proxies=$(grep -c -E "^(proxy|socks)" "${CONFIG_DIR}/3proxy.cfg" 2>/dev/null || echo "0")
+            echo
+            echo -e "${GREEN}✅ Toplam $total_proxies proxy yapılandırıldı${NC}"
+            echo
+        fi
+        
+        # Show listening ports from system
+        log "Sistem Port Durumu:"
+        echo -e "${GRAY}(IPv6 portları tüm IP'lerde dinleniyor)${NC}"
+        netstat -tlnp | grep 3proxy | head -15 | while read -r line; do
+            local port=$(echo "$line" | awk '{print $4}' | grep -o ':[0-9]*$' | cut -d':' -f2)
+            echo -e "${BLUE}Port $port:${NC} ${GREEN}✅ Aktif${NC}"
+        done
     else
         error "Proxy başlatma başarısız"
+        echo
         
         log "Servis durumu:"
         systemctl status 3proxy --no-pager
+        echo
+        
+        log "Konfigürasyon dosyası kontrolü:"
+        if [[ -f "${CONFIG_DIR}/3proxy.cfg" ]]; then
+            echo -e "${GREEN}✅ Konfigürasyon dosyası mevcut${NC}"
+            log "Son 10 satır:"
+            tail -10 "${CONFIG_DIR}/3proxy.cfg"
+        else
+            echo -e "${RED}❌ Konfigürasyon dosyası bulunamadı: ${CONFIG_DIR}/3proxy.cfg${NC}"
+        fi
+        echo
         
         log "Son 20 log satırı:"
         journalctl -u 3proxy -n 20 --no-pager
     fi
     
+    echo
     read -p "Press Enter to continue..."
 }
 
@@ -2150,10 +2196,52 @@ show_proxy_status() {
     echo -e "${CYAN}🔌 Aktif port sayısı: $active_ports${NC}"
     
     echo
-    echo -e "${WHITE}Aktif Portlar:${NC}"
-    netstat -tlnp 2>/dev/null | grep 3proxy | head -20 | while read line; do
-        port=$(echo "$line" | awk '{print $4}' | cut -d':' -f2)
-        echo -e "${GREEN}  Port: $port${NC}"
+    echo -e "${WHITE}📋 Aktif Proxy Listesi:${NC}"
+    echo "==============================="
+    
+    if [[ -f "${CONFIG_DIR}/3proxy.cfg" ]]; then
+        echo -e "${CYAN}Konfigüre Edilmiş Proxy'ler:${NC}"
+        
+        # Parse proxy configurations and show with status
+        local proxy_count=0
+        grep -E "^(proxy|socks)" "${CONFIG_DIR}/3proxy.cfg" 2>/dev/null | while read -r line; do
+            if [[ "$line" =~ ^(proxy|socks) ]]; then
+                ((proxy_count++))
+                local type=$(echo "$line" | awk '{print $1}')
+                local ip=$(echo "$line" | sed 's/.*-i\([0-9.]*\).*/\1/')
+                local port=$(echo "$line" | sed 's/.*-p\([0-9]*\).*/\1/')
+                
+                if [[ -n "$ip" ]] && [[ -n "$port" ]] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    # Check if port is actually listening
+                    if netstat -tln 2>/dev/null | grep -q ":$port "; then
+                        echo -e "${GREEN}  ✅ ${type^^}: ${WHITE}$ip:$port${NC} ${GREEN}(Aktif)${NC}"
+                    else
+                        echo -e "${RED}  ❌ ${type^^}: ${WHITE}$ip:$port${NC} ${RED}(Pasif)${NC}"
+                    fi
+                fi
+            fi
+        done
+        
+        # If no specific proxy configs found, show general port info
+        if ! grep -E "^(proxy|socks)" "${CONFIG_DIR}/3proxy.cfg" >/dev/null 2>&1; then
+            echo -e "${YELLOW}Genel port dinleme modu aktif:${NC}"
+            netstat -tlnp 2>/dev/null | grep 3proxy | head -10 | while read -r line; do
+                local port=$(echo "$line" | awk '{print $4}' | cut -d':' -f2)
+                echo -e "${GREEN}  ✅ Port: ${WHITE}$port${NC} ${GREEN}(Tüm IP'lerde dinleniyor)${NC}"
+            done
+        fi
+    else
+        echo -e "${RED}❌ Konfigürasyon dosyası bulunamadı${NC}"
+    fi
+    
+    echo
+    echo -e "${WHITE}Sistem Portları:${NC}"
+    echo -e "${GRAY}(Sistemde dinlenen 3proxy portları)${NC}"
+    netstat -tlnp 2>/dev/null | grep 3proxy | head -15 | while read -r line; do
+        local full_port=$(echo "$line" | awk '{print $4}')
+        local port=$(echo "$full_port" | grep -o '[0-9]*$')
+        local pid=$(echo "$line" | awk '{print $7}' | cut -d'/' -f1)
+        echo -e "${BLUE}  🔌 $full_port${NC} ${GREEN}(PID: $pid)${NC}"
     done
     
     echo
@@ -2167,6 +2255,8 @@ show_proxy_status() {
     echo -e "${WHITE}Konfigürasyon Dosyaları:${NC}"
     if [ -f "${CONFIG_DIR}/3proxy.cfg" ]; then
         echo -e "${GREEN}  ✅ Ana config: ${CONFIG_DIR}/3proxy.cfg${NC}"
+        local config_lines=$(wc -l < "${CONFIG_DIR}/3proxy.cfg")
+        echo -e "${CYAN}     Toplam satır: $config_lines${NC}"
     else
         echo -e "${RED}  ❌ Ana config bulunamadı${NC}"
     fi
