@@ -1,6 +1,6 @@
-# 3proxy Elite Manager v2.3
+# 3proxy Elite Manager v2.4
 
-**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Hız Testi + Sunucu Yeniden Kurulum**
+**Ubuntu 20.04+ İçin Gelişmiş 3proxy Yönetim Sistemi - Global Menu Komutu**
 
 Bu script, Ubuntu 20.04+ işletim sistemlerinde çalışan kapsamlı bir 3proxy yönetim sistemidir. Sınırsız proxy oluşturma, çoklu mod desteği ve gelişmiş yönetim özellikleri sunar. Artık tüm sistem tek dosyada!
 
@@ -64,8 +64,13 @@ sudo ./3proxy_menu.sh --install
 
 ### 🎮 **Kurulum Sonrası Kullanım**
 ```bash
-# Global komut olarak (kurulum sonrası)
-sudo 3proxy-manager
+# Herhangi bir yerden kısa komut (YENİ!)
+sudo menu
+
+# Diğer global komutlar
+sudo 3proxy              # Ana komut
+sudo proxy-menu          # Alternatif
+sudo 3proxy-manager      # Tam komut
 
 # Veya doğrudan script ile
 sudo /opt/3proxy-elite/3proxy_menu.sh

@@ -2,7 +2,7 @@
 # 3proxy Elite Anonymous Proxy - Advanced Menu System
 # Ubuntu 20.04+ Compatible - Self-Installing Version
 # Author: muzaffer72
-# Version: 2.3.2
+# Version: 2.4
 
 set -e
 
@@ -13,7 +13,7 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # Configuration
-VERSION="2.3.2"
+VERSION="2.4"
 SCRIPT_DIR="/opt/3proxy"
 CONFIG_DIR="/etc/3proxy"
 LOG_DIR="/var/log/3proxy"
@@ -65,14 +65,19 @@ install_system() {
     cp "$0" "$install_dir/3proxy_menu.sh"
     chmod +x "$install_dir/3proxy_menu.sh"
 
-    # Create global command
+    # Create global commands
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy
+    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-menu
 
     echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
     echo
-    echo -e "${GREEN}🚀 Kullanım:${NC}"
-    echo -e "   ${BLUE}sudo 3proxy-manager${NC}     # Ana menüyü başlat"
-    echo -e "   ${BLUE}sudo $install_dir/3proxy_menu.sh${NC}  # Doğrudan çalıştır"
+    echo -e "${GREEN}🚀 Global Komutlar:${NC}"
+    echo -e "   ${BLUE}sudo menu${NC}               # Kısa komut (herhangi bir yerden)"
+    echo -e "   ${BLUE}sudo 3proxy${NC}             # Ana komut"
+    echo -e "   ${BLUE}sudo proxy-menu${NC}         # Alternatif komut"
+    echo -e "   ${BLUE}sudo 3proxy-manager${NC}     # Tam komut"
     echo
     echo -e "${YELLOW}📋 Özellikler:${NC}"
     echo -e "   ✅ Ubuntu 20.04+ uyumluluğu"
@@ -87,7 +92,7 @@ install_system() {
     if [[ "$start_now" =~ ^[Yy] ]]; then
         exec "$install_dir/3proxy_menu.sh"
     else
-        echo -e "${GREEN}Menü başlatmak için: ${BLUE}sudo 3proxy-manager${NC}"
+        echo -e "${GREEN}Menü başlatmak için herhangi bir yerden: ${BLUE}sudo menu${NC}"
     fi
 }
 
@@ -494,7 +499,19 @@ install_3proxy() {
     # Set permissions
     chown -R proxy:proxy /usr/local/3proxy /var/run/3proxy
     
+    # Create global menu commands
+    current_script_path=$(realpath "$0")
+    ln -sf "$current_script_path" /usr/local/bin/menu 2>/dev/null || true
+    ln -sf "$current_script_path" /usr/local/bin/3proxy 2>/dev/null || true  
+    ln -sf "$current_script_path" /usr/local/bin/proxy-menu 2>/dev/null || true
+    ln -sf "$current_script_path" /usr/local/bin/3proxy-manager 2>/dev/null || true
+    
     success "3proxy başarıyla kuruldu"
+    echo -e "${CYAN}💡 Global komutlar oluşturuldu:${NC}"
+    echo -e "   ${BLUE}sudo menu${NC} - Herhangi bir yerden menüyü aç"
+    echo -e "   ${BLUE}sudo 3proxy${NC} - Ana komut"
+    echo -e "   ${BLUE}sudo proxy-menu${NC} - Alternatif komut"
+    echo
     read -p "Press Enter to continue..."
 }
 
@@ -2289,8 +2306,12 @@ uninstall_3proxy() {
     rm -rf "${LOG_DIR}"
     rm -rf "${DATA_DIR}"
     rm -rf "${SCRIPT_DIR}"
+    
+    # Remove global commands
     rm -f /usr/local/bin/3proxy
-    rm -f /usr/local/bin/3proxy-menu
+    rm -f /usr/local/bin/menu
+    rm -f /usr/local/bin/proxy-menu
+    rm -f /usr/local/bin/3proxy-manager
     
     # Remove user
     userdel proxy 2>/dev/null || true
