@@ -1757,9 +1757,13 @@ create_proxy_fixed() {
             
             if [[ "$test_now" =~ ^[Yy] ]]; then
                 log "[INFO] create_proxy_fixed: Starting proxy validation for '$proxy_list_file'."
+                log "[DEBUG] create_proxy_fixed: proxy_list_file variable content: '$proxy_list_file'"
+                log "[DEBUG] create_proxy_fixed: File exists check: $([ -f "$proxy_list_file" ] && echo "YES" || echo "NO")"
+                log "[DEBUG] create_proxy_fixed: File size: $(wc -l < "$proxy_list_file" 2>/dev/null || echo "ERROR")"
                 echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
                 sleep 1
                 validate_proxy_list "$proxy_list_file"
+                log "[DEBUG] create_proxy_fixed: validate_proxy_list function returned with code: $?"
             else
                 log "[INFO] create_proxy_fixed: User skipped proxy validation."
             fi
