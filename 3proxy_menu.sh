@@ -391,27 +391,34 @@ validate_proxy_list() {
         
         ((tested_count++))
         log "[DEBUG] validate_proxy_list: Processing proxy #$tested_count"
+        
+        # Parse different proxy formats (support subnet notation)
         local expected_ip port username password
         
+        log "[DEBUG] validate_proxy_list: Attempting to parse proxy format"
         if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
             # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
             username="${BASH_REMATCH[1]}"
             password="${BASH_REMATCH[2]}"
             expected_ip="${BASH_REMATCH[3]}"  # IP without subnet
             port="${BASH_REMATCH[5]}"
+            log "[DEBUG] validate_proxy_list: Parsed format USER:PASS@IP:PORT - user=$username, pass=$password, ip=$expected_ip, port=$port"
         elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
             # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
             expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
             port="${BASH_REMATCH[3]}"
             username="${BASH_REMATCH[4]}"
             password="${BASH_REMATCH[5]}"
+            log "[DEBUG] validate_proxy_list: Parsed format IP:PORT:USER:PASS - ip=$expected_ip, port=$port, user=$username, pass=$password"
         elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
             # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
             expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
             port="${BASH_REMATCH[3]}"
             username=""
             password=""
+            log "[DEBUG] validate_proxy_list: Parsed format IP:PORT - ip=$expected_ip, port=$port (public proxy)"
         else
+            log "[ERROR] validate_proxy_list: Failed to parse proxy format: '$proxy_line'"
             if [[ "$show_details" == "true" ]]; then
                 printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "PARSE_ERROR" "N/A"
                 echo -e "${GRAY}         └─ Desteklenmeyen format: $proxy_line${NC}"
