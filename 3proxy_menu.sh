@@ -48,6 +48,20 @@ install_system() {
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
 
+    # Get the full path of the current script FIRST (before any cd commands)
+    if command -v realpath >/dev/null 2>&1; then
+        script_path="$(realpath "$0")"
+    else
+        # Fallback: use readlink and pwd
+        if [[ "$0" == /* ]]; then
+            script_path="$0"
+        else
+            script_path="$(pwd)/$0"
+        fi
+    fi
+    
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] Script yolu belirlendi: $script_path${NC}"
+
     # Check root
     if [[ $EUID -ne 0 ]]; then
         echo -e "${RED}[ERROR] Bu script root olarak çalıştırılmalıdır: sudo $0 --install${NC}"
@@ -69,19 +83,7 @@ install_system() {
     install_dir="/opt/3proxy-elite"
     mkdir -p "$install_dir"
     
-    # Get the full path of the current script
-    if command -v realpath >/dev/null 2>&1; then
-        script_path="$(realpath "$0")"
-    else
-        # Fallback: use readlink and pwd
-        if [[ "$0" == /* ]]; then
-            script_path="$0"
-        else
-            script_path="$(pwd)/$0"
-        fi
-    fi
-    
-    # Copy current script to installation directory
+    # Copy current script to installation directory (using script_path from function start)
     if [ -f "$script_path" ]; then
         cp "$script_path" "$install_dir/3proxy_menu.sh"
         chmod +x "$install_dir/3proxy_menu.sh"
@@ -173,91 +175,30 @@ test_proxy() {
     local proxy_line="$1"
     local expected_ip="$2"
     
-    # Parse different proxy formats (support subnet notation)
-    local ip port username password
-    
-    if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
-        # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
-        username="${BASH_REMATCH[1]}"
-        password="${BASH_REMATCH[2]}"
-        ip="${BASH_REMATCH[3]}"  # IP without subnet
-        port="${BASH_REMATCH[5]}"
-    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
-        # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
-        ip="${BASH_REMATCH[1]}"  # IP without subnet
-        port="${BASH_REMATCH[3]}"
-        username="${BASH_REMATCH[4]}"
-        password="${BASH_REMATCH[5]}"
-    elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
-        # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
-        ip="${BASH_REMATCH[1]}"  # IP without subnet
-        port="${BASH_REMATCH[3]}"
-        username=""
-        password=""
-    else
-        echo "Invalid proxy format: $proxy_line" >&2
-        return 1
-    fi
-    
-    # Validate basic format
-    if [[ -z "$ip" ]] || [[ -z "$port" ]]; then
-        echo "Invalid proxy format: $proxy_line" >&2
-        return 1
-    fi
-    
-    # Test HTTP proxy with more robust error handling
+    # Basit proxy test - sadece curl ile httpbin.org/ip test et
     local test_result
     local curl_exit_code
     
-    if [[ -n "$username" ]] && [[ -n "$password" ]]; then
-        # Authenticated proxy
-        test_result=$(timeout 15 curl -s --connect-timeout 10 --max-time 15 \
-                     --proxy "$username:$password@$ip:$port" \
-                     --user-agent "Mozilla/5.0 (compatible; ProxyTest/1.0)" \
-                     http://httpbin.org/ip 2>/dev/null)
-        curl_exit_code=$?
-    else
-        # Public proxy (no authentication)
-        test_result=$(timeout 15 curl -s --connect-timeout 10 --max-time 15 \
-                     --proxy "$ip:$port" \
-                     --user-agent "Mozilla/5.0 (compatible; ProxyTest/1.0)" \
-                     http://httpbin.org/ip 2>/dev/null)
-        curl_exit_code=$?
-    fi
+    # Proxy formatı: username:password@ip:port
+    test_result=$(timeout 10 curl -x "$proxy_line" -s http://httpbin.org/ip 2>/dev/null)
+    curl_exit_code=$?
     
-    # Handle different curl exit codes
-    case $curl_exit_code in
-        0)
-            # Success - check response
-            if [[ -n "$test_result" ]]; then
-                # Extract origin IP from JSON response
-                local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 | cut -d',' -f1)
-                
-                if [[ -n "$origin_ip" ]]; then
-                    if [[ "$origin_ip" == "$expected_ip" ]]; then
-                        return 0  # Success
-                    else
-                        echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
-                        return 1  # IP mismatch
-                    fi
-                else
-                    echo "Invalid JSON response" >&2
-                    return 1
-                fi
-            else
-                echo "Empty response" >&2
-                return 1
-            fi
-            ;;
-        28|7)
-            # Timeout or connection failed
-            return 2
-            ;;
-        *)
-            echo "Curl failed with code $curl_exit_code" >&2
+    # Curl başarılı mı?
+    if [ $curl_exit_code -eq 0 ] && [ -n "$test_result" ]; then
+        # JSON'dan origin IP'sini çıkar
+        local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 | cut -d',' -f1)
+        
+        # Beklenen IP ile dönen IP aynı mı?
+        if [ "$origin_ip" = "$expected_ip" ]; then
+            return 0  # Başarılı
+        else
+            echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
             return 1
-            ;;
-    esac
+        fi
+    else
+        echo "Connection failed (curl exit: $curl_exit_code)" >&2
+        return 1
+    fi
 }
 
 # Mevcut proxy listesini göster
@@ -466,22 +407,16 @@ validate_proxy_list() {
             printf "%-4s %-15s %-6s " "$tested_count." "$expected_ip" "$port"
         fi
         
-        # Test the proxy with timeout
-        if test_result=$(test_proxy "$proxy_line" "$expected_ip" 2>&1); then
+        # Test the proxy - basitleştirilmiş version
+        if test_proxy "$proxy_line" "$expected_ip" >/dev/null 2>&1; then
             ((success_count++))
             if [[ "$show_details" == "true" ]]; then
                 echo -e "TESTING  ${GREEN}✅ BAŞARILI${NC}"
             fi
-        elif [[ $? -eq 2 ]]; then
-            ((timeout_count++))
-            if [[ "$show_details" == "true" ]]; then
-                echo -e "TIMEOUT  ${YELLOW}⏱️  ZAMAN AŞIMI${NC}"
-            fi
         else
             ((failed_count++))
             if [[ "$show_details" == "true" ]]; then
-                echo -e "FAILED   ${RED}❌ HATA${NC}"
-                [[ -n "$test_result" ]] && echo -e "${GRAY}         └─ $test_result${NC}"
+                echo -e "FAILED   ${RED}❌ BAŞARISIZ${NC}"
             fi
         fi
         
