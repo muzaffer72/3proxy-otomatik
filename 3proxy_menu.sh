@@ -69,9 +69,29 @@ install_system() {
     install_dir="/opt/3proxy-elite"
     mkdir -p "$install_dir"
     
+    # Get the full path of the current script
+    if command -v realpath >/dev/null 2>&1; then
+        script_path="$(realpath "$0")"
+    else
+        # Fallback: use readlink and pwd
+        if [[ "$0" == /* ]]; then
+            script_path="$0"
+        else
+            script_path="$(pwd)/$0"
+        fi
+    fi
+    
     # Copy current script to installation directory
-    cp "$0" "$install_dir/3proxy_menu.sh"
-    chmod +x "$install_dir/3proxy_menu.sh"
+    if [ -f "$script_path" ]; then
+        cp "$script_path" "$install_dir/3proxy_menu.sh"
+        chmod +x "$install_dir/3proxy_menu.sh"
+        echo -e "${GREEN}[$(date +'%H:%M:%S')] Script başarıyla kopyalandı: $script_path -> $install_dir/3proxy_menu.sh${NC}"
+    else
+        echo -e "${RED}[$(date +'%H:%M:%S')] HATA: Script dosyası bulunamadı: $script_path${NC}"
+        echo -e "${YELLOW}[$(date +'%H:%M:%S')] Çalışma dizini: $(pwd)${NC}"
+        echo -e "${YELLOW}[$(date +'%H:%M:%S')] $0 parametresi: $0${NC}"
+        return 1
+    fi
 
     # Create global commands with proper permissions
     ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
@@ -118,8 +138,8 @@ install_system() {
 print_header() {
     clear
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║                    ${WHITE}Onvao.net 3Proxy Elite Anonim Proxy Yönetimi v${VERSION}${CYAN}                    ║${NC}"
-    echo -e "${CYAN}║                    ${YELLOW}Ubuntu 20.04+ ile test edildi.${CYAN}                     ║${NC}"
+    echo -e "${CYAN}║                    ${WHITE}Onvao.net 3Proxy Elite Anonim Proxy v${VERSION}${CYAN}                    ║${NC}"
+    echo -e "${CYAN}║                    ${YELLOW}Ubuntu 20,04 ile test edildi.${CYAN}                     ║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo
 }
