@@ -70,8 +70,6 @@ install_system() {
     # Validate script path
     if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
         echo -e "${RED}[ERROR] Script yolu belirlenemedi veya dosya bulunamadı${NC}"
-        echo -e "${YELLOW}[DEBUG] Mevcut dizin: $(pwd)${NC}"
-        echo -e "${YELLOW}[DEBUG] Script varlığı: $(ls -la "$0" 2>/dev/null || echo "Bulunamadı")${NC}"
         exit 1
     fi
 
@@ -176,34 +174,27 @@ success() {
 test_proxy() {
     local proxy_line="$1"
     local expected_ip="$2"
-    log "[DEBUG] test_proxy: Testing proxy line: '$proxy_line' | Expected IP: '$expected_ip'"
     
-    # Basit proxy test - sadece curl ile httpbin.org/ip test et
+    # Basit proxy test - icanhazip.com ile test et (sadece IP döndürür)
     local test_result
     local curl_exit_code
     
     # Proxy formatı: username:password@ip:port
-    test_result=$(timeout 10 curl -x "$proxy_line" -s http://httpbin.org/ip 2>/dev/null)
+    test_result=$(timeout 10 curl -x "$proxy_line" -s https://icanhazip.com 2>/dev/null)
     curl_exit_code=$?
-    log "[DEBUG] test_proxy: curl exit code: $curl_exit_code"
-    log "[DEBUG] test_proxy: curl result: '$test_result'"
     
     # Curl başarılı mı?
     if [ $curl_exit_code -eq 0 ] && [ -n "$test_result" ]; then
-        # JSON'dan origin IP'sini çıkar
-        local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 | cut -d',' -f1)
-        log "[DEBUG] test_proxy: Extracted origin IP: '$origin_ip'"
+        # icanhazip.com sadece IP döndürür, temizle
+        local origin_ip=$(echo "$test_result" | tr -d '\r\n ')
         
         # Beklenen IP ile dönen IP aynı mı?
         if [ "$origin_ip" = "$expected_ip" ]; then
-            log "[DEBUG] test_proxy: SUCCESS - IP match."
             return 0  # Başarılı
         else
-            log "[DEBUG] test_proxy: FAILED - IP Mismatch. Expected '$expected_ip', Got '$origin_ip'"
             return 1
         fi
     else
-        log "[DEBUG] test_proxy: FAILED - Connection failed or empty result."
         return 1
     fi
 }
@@ -330,9 +321,6 @@ validate_proxy_list() {
     local proxy_file="$1"
     local show_details="${2:-true}"
     
-    log "[DEBUG] validate_proxy_list: Starting validation for file '$proxy_file'"
-    log "[DEBUG] validate_proxy_list: show_details='$show_details'"
-    
     if [[ ! -f "$proxy_file" ]]; then
         log "[ERROR] validate_proxy_list: File not found: '$proxy_file'"
         error "Proxy dosyası bulunamadı: $proxy_file"
@@ -353,7 +341,6 @@ validate_proxy_list() {
     fi
     
     local total_proxies=$(wc -l < "$proxy_file")
-    log "[DEBUG] validate_proxy_list: Total proxies in file: $total_proxies"
     local tested_count=0
     local success_count=0
     local failed_count=0
@@ -365,10 +352,9 @@ validate_proxy_list() {
         echo "=================================="
         echo -e "${WHITE}Proxy Dosyası: ${BLUE}$proxy_file${NC}"
         echo -e "${WHITE}Toplam Proxy: ${YELLOW}$total_proxies${NC}"
-        echo -e "${WHITE}Test URL: ${BLUE}http://httpbin.org/ip${NC}"
+        echo -e "${WHITE}Test URL: ${BLUE}https://icanhazip.com${NC}"
         echo
         
-        # Show first few proxies for debugging
         echo -e "${GRAY}İlk 3 proxy örneği:${NC}"
         head -3 "$proxy_file" | nl
         echo
@@ -379,52 +365,50 @@ validate_proxy_list() {
         echo "=================================================="
     fi
     
-    log "[DEBUG] validate_proxy_list: Starting while loop to read proxy file"
     while IFS= read -r proxy_line; do
-        log "[DEBUG] validate_proxy_list: Processing line: '$proxy_line'"
         
         # Skip empty lines and comments
         if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]] || [[ "$proxy_line" =~ ^[[:space:]]*$ ]]; then
-            log "[DEBUG] validate_proxy_list: Skipping empty/comment line"
             continue
         fi
         
         ((tested_count++))
-        log "[DEBUG] validate_proxy_list: Processing proxy #$tested_count"
         
         # Parse different proxy formats (support subnet notation)
-        local expected_ip port username password
+        local expected_ip
+        local port
+        local username
+        local password
         
-        log "[DEBUG] validate_proxy_list: Attempting to parse proxy format"
-        if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
-            # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
-            username="${BASH_REMATCH[1]}"
-            password="${BASH_REMATCH[2]}"
-            expected_ip="${BASH_REMATCH[3]}"  # IP without subnet
-            port="${BASH_REMATCH[5]}"
-            log "[DEBUG] validate_proxy_list: Parsed format USER:PASS@IP:PORT - user=$username, pass=$password, ip=$expected_ip, port=$port"
-        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
-            # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
-            expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
-            port="${BASH_REMATCH[3]}"
-            username="${BASH_REMATCH[4]}"
-            password="${BASH_REMATCH[5]}"
-            log "[DEBUG] validate_proxy_list: Parsed format IP:PORT:USER:PASS - ip=$expected_ip, port=$port, user=$username, pass=$password"
-        elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
-            # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
-            expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
-            port="${BASH_REMATCH[3]}"
-            username=""
-            password=""
-            log "[DEBUG] validate_proxy_list: Parsed format IP:PORT - ip=$expected_ip, port=$port (public proxy)"
-        else
-            log "[ERROR] validate_proxy_list: Failed to parse proxy format: '$proxy_line'"
-            if [[ "$show_details" == "true" ]]; then
-                printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "PARSE_ERROR" "N/A"
-                echo -e "${GRAY}         └─ Desteklenmeyen format: $proxy_line${NC}"
+        # Test basit koşul önce
+        if [[ "test" == "test" ]]; then
+            if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+                # Format: USER:PASS@IP/SUBNET:PORT or USER:PASS@IP:PORT
+                username="${BASH_REMATCH[1]}"
+                password="${BASH_REMATCH[2]}"
+                expected_ip="${BASH_REMATCH[3]}"  # IP without subnet
+                port="${BASH_REMATCH[5]}"
+            elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+):([^:]+):(.+)$ ]]; then
+                # Format: IP/SUBNET:PORT:USER:PASS or IP:PORT:USER:PASS (legacy)
+                expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
+                port="${BASH_REMATCH[3]}"
+                username="${BASH_REMATCH[4]}"
+                password="${BASH_REMATCH[5]}"
+            elif [[ "$proxy_line" =~ ^([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
+                # Format: IP/SUBNET:PORT or IP:PORT (public proxy)
+                expected_ip="${BASH_REMATCH[1]}"  # IP without subnet
+                port="${BASH_REMATCH[3]}"
+                username=""
+                password=""
+            else
+                log "[ERROR] validate_proxy_list: Failed to parse proxy format: '$proxy_line'"
+                if [[ "$show_details" == "true" ]]; then
+                    printf "%-4s %-15s %-6s FAILED   ${RED}❌ FORMAT HATASI${NC}\n" "$tested_count." "PARSE_ERROR" "N/A"
+                    echo -e "${GRAY}         └─ Desteklenmeyen format: $proxy_line${NC}"
+                fi
+                ((failed_count++))
+                continue
             fi
-            ((failed_count++))
-            continue
         fi
         
         if [[ "$show_details" == "true" ]]; then
@@ -432,15 +416,12 @@ validate_proxy_list() {
         fi
         
         # Test the proxy - basitleştirilmiş version
-        log "[DEBUG] validate_proxy_list: Calling test_proxy for line: '$proxy_line'"
         if test_proxy "$proxy_line" "$expected_ip"; then
-            log "[DEBUG] validate_proxy_list: test_proxy returned SUCCESS for '$proxy_line'"
             ((success_count++))
             if [[ "$show_details" == "true" ]]; then
                 echo -e "TESTING  ${GREEN}✅ BAŞARILI${NC}"
             fi
         else
-            log "[DEBUG] validate_proxy_list: test_proxy returned FAILED for '$proxy_line'"
             ((failed_count++))
             if [[ "$show_details" == "true" ]]; then
                 echo -e "FAILED   ${RED}❌ BAŞARISIZ${NC}"
@@ -1586,15 +1567,6 @@ create_proxy_random() {
         systemctl restart 3proxy
         if systemctl is-active --quiet 3proxy; then
             success "Proxy'ler başarıyla başlatıldı"
-            
-            # Ask for proxy validation
-            echo
-            read -p "Proxy'leri test etmek istiyor musunuz? [y/n]: " test_now
-            if [[ "$test_now" =~ ^[Yy] ]]; then
-                echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
-                sleep 2
-                validate_proxy_list "$proxy_list_file"
-            fi
         else
             error "Proxy başlatma başarısız"
         fi
@@ -1755,25 +1727,6 @@ create_proxy_fixed() {
         systemctl restart 3proxy
         if systemctl is-active --quiet 3proxy; then
             success "Proxy'ler başarıyla başlatıldı"
-            
-            # Ask for proxy validation
-            echo
-            log "[INFO] create_proxy_fixed: About to ask user if they want to test proxies."
-            read -p "Proxy'leri test etmek istiyor musunuz? [y/n]: " test_now
-            log "[INFO] create_proxy_fixed: User response for testing proxies: '$test_now'"
-            
-            if [[ "$test_now" =~ ^[Yy] ]]; then
-                log "[INFO] create_proxy_fixed: Starting proxy validation for '$proxy_list_file'."
-                log "[DEBUG] create_proxy_fixed: proxy_list_file variable content: '$proxy_list_file'"
-                log "[DEBUG] create_proxy_fixed: File exists check: $([ -f "$proxy_list_file" ] && echo "YES" || echo "NO")"
-                log "[DEBUG] create_proxy_fixed: File size: $(wc -l < "$proxy_list_file" 2>/dev/null || echo "ERROR")"
-                echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
-                sleep 1
-                validate_proxy_list "$proxy_list_file"
-                log "[DEBUG] create_proxy_fixed: validate_proxy_list function returned with code: $?"
-            else
-                log "[INFO] create_proxy_fixed: User skipped proxy validation."
-            fi
         else
             error "Proxy başlatma başarısız"
             log "[ERROR] create_proxy_fixed: Failed to start 3proxy service."
@@ -1936,19 +1889,6 @@ create_proxy_public() {
         systemctl restart 3proxy
         if systemctl is-active --quiet 3proxy; then
             success "Proxy'ler başarıyla başlatıldı"
-            
-            # Ask for proxy validation
-            echo
-            read -p "Proxy'leri test etmek istiyor musunuz? [y/n]: " test_now
-            if [[ "$test_now" =~ ^[Yy] ]]; then
-                echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
-                sleep 2
-                # For public proxies, modify format for testing (no auth)
-                temp_test_file="${TEMP_DIR}/public_proxy_test.txt"
-                sed 's/::/:/g' "$proxy_list_file" > "$temp_test_file"
-                validate_proxy_list "$temp_test_file"
-                rm -f "$temp_test_file" 2>/dev/null
-            fi
         else
             error "Proxy başlatma başarısız"
         fi
@@ -2154,15 +2094,6 @@ create_proxy_maximum() {
         systemctl restart 3proxy
         if systemctl is-active --quiet 3proxy; then
             success "Proxy'ler başarıyla başlatıldı"
-            
-            # Ask for proxy validation
-            echo
-            read -p "Proxy'leri test etmek istiyor musunuz? [y/n]: " test_now
-            if [[ "$test_now" =~ ^[Yy] ]]; then
-                echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
-                sleep 2
-                validate_proxy_list "$proxy_list_file"
-            fi
         else
             error "Proxy başlatma başarısız"
         fi
