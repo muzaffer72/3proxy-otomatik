@@ -176,6 +176,7 @@ success() {
 test_proxy() {
     local proxy_line="$1"
     local expected_ip="$2"
+    log "[DEBUG] test_proxy: Testing proxy line: '$proxy_line' | Expected IP: '$expected_ip'"
     
     # Basit proxy test - sadece curl ile httpbin.org/ip test et
     local test_result
@@ -184,21 +185,25 @@ test_proxy() {
     # Proxy formatı: username:password@ip:port
     test_result=$(timeout 10 curl -x "$proxy_line" -s http://httpbin.org/ip 2>/dev/null)
     curl_exit_code=$?
+    log "[DEBUG] test_proxy: curl exit code: $curl_exit_code"
+    log "[DEBUG] test_proxy: curl result: '$test_result'"
     
     # Curl başarılı mı?
     if [ $curl_exit_code -eq 0 ] && [ -n "$test_result" ]; then
         # JSON'dan origin IP'sini çıkar
         local origin_ip=$(echo "$test_result" | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 | cut -d',' -f1)
+        log "[DEBUG] test_proxy: Extracted origin IP: '$origin_ip'"
         
         # Beklenen IP ile dönen IP aynı mı?
         if [ "$origin_ip" = "$expected_ip" ]; then
+            log "[DEBUG] test_proxy: SUCCESS - IP match."
             return 0  # Başarılı
         else
-            # echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
+            log "[DEBUG] test_proxy: FAILED - IP Mismatch. Expected '$expected_ip', Got '$origin_ip'"
             return 1
         fi
     else
-        # echo "Connection failed (curl exit: $curl_exit_code)" >&2
+        log "[DEBUG] test_proxy: FAILED - Connection failed or empty result."
         return 1
     fi
 }
@@ -410,12 +415,15 @@ validate_proxy_list() {
         fi
         
         # Test the proxy - basitleştirilmiş version
-        if test_proxy "$proxy_line" "$expected_ip" >/dev/null 2>&1; then
+        log "[DEBUG] validate_proxy_list: Calling test_proxy for line: '$proxy_line'"
+        if test_proxy "$proxy_line" "$expected_ip"; then
+            log "[DEBUG] validate_proxy_list: test_proxy returned SUCCESS for '$proxy_line'"
             ((success_count++))
             if [[ "$show_details" == "true" ]]; then
                 echo -e "TESTING  ${GREEN}✅ BAŞARILI${NC}"
             fi
         else
+            log "[DEBUG] validate_proxy_list: test_proxy returned FAILED for '$proxy_line'"
             ((failed_count++))
             if [[ "$show_details" == "true" ]]; then
                 echo -e "FAILED   ${RED}❌ BAŞARISIZ${NC}"
