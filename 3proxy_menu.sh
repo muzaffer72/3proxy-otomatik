@@ -1729,23 +1729,36 @@ create_proxy_fixed() {
     success "Proxy listesi: $proxy_list_file"
     echo -e "${BLUE}💡 Hız testi için Menü → 20 → Bu dosyayı seçin: $(basename "$proxy_list_file")${NC}"
     
+    log "[INFO] create_proxy_fixed: About to ask user if they want to start proxies."
     read -p "Proxy'leri başlatmak istiyor musunuz? [y/n]: " start_now
+    log "[INFO] create_proxy_fixed: User response for starting proxies: '$start_now'"
+    
     if [[ "$start_now" =~ ^[Yy] ]]; then
+        log "[INFO] create_proxy_fixed: Restarting 3proxy service."
         systemctl restart 3proxy
         if systemctl is-active --quiet 3proxy; then
             success "Proxy'ler başarıyla başlatıldı"
             
             # Ask for proxy validation
             echo
+            log "[INFO] create_proxy_fixed: About to ask user if they want to test proxies."
             read -p "Proxy'leri test etmek istiyor musunuz? [y/n]: " test_now
+            log "[INFO] create_proxy_fixed: User response for testing proxies: '$test_now'"
+            
             if [[ "$test_now" =~ ^[Yy] ]]; then
+                log "[INFO] create_proxy_fixed: Starting proxy validation for '$proxy_list_file'."
                 echo -e "${YELLOW}🔍 Proxy doğrulaması başlatılıyor...${NC}"
-                sleep 2
+                sleep 1
                 validate_proxy_list "$proxy_list_file"
+            else
+                log "[INFO] create_proxy_fixed: User skipped proxy validation."
             fi
         else
             error "Proxy başlatma başarısız"
+            log "[ERROR] create_proxy_fixed: Failed to start 3proxy service."
         fi
+    else
+        log "[INFO] create_proxy_fixed: User skipped starting proxies."
     fi
     
     read -p "Press Enter to continue..."
