@@ -330,23 +330,30 @@ validate_proxy_list() {
     local proxy_file="$1"
     local show_details="${2:-true}"
     
+    log "[DEBUG] validate_proxy_list: Starting validation for file '$proxy_file'"
+    log "[DEBUG] validate_proxy_list: show_details='$show_details'"
+    
     if [[ ! -f "$proxy_file" ]]; then
+        log "[ERROR] validate_proxy_list: File not found: '$proxy_file'"
         error "Proxy dosyası bulunamadı: $proxy_file"
         return 1
     fi
     
     # Check if file is readable and not empty
     if [[ ! -r "$proxy_file" ]]; then
+        log "[ERROR] validate_proxy_list: File not readable: '$proxy_file'"
         error "Proxy dosyası okunamıyor: $proxy_file"
         return 1
     fi
     
     if [[ ! -s "$proxy_file" ]]; then
+        log "[ERROR] validate_proxy_list: File is empty: '$proxy_file'"
         error "Proxy dosyası boş: $proxy_file"
         return 1
     fi
     
     local total_proxies=$(wc -l < "$proxy_file")
+    log "[DEBUG] validate_proxy_list: Total proxies in file: $total_proxies"
     local tested_count=0
     local success_count=0
     local failed_count=0
@@ -372,15 +379,18 @@ validate_proxy_list() {
         echo "=================================================="
     fi
     
+    log "[DEBUG] validate_proxy_list: Starting while loop to read proxy file"
     while IFS= read -r proxy_line; do
+        log "[DEBUG] validate_proxy_list: Processing line: '$proxy_line'"
+        
         # Skip empty lines and comments
         if [[ -z "$proxy_line" ]] || [[ "$proxy_line" =~ ^#.* ]] || [[ "$proxy_line" =~ ^[[:space:]]*$ ]]; then
+            log "[DEBUG] validate_proxy_list: Skipping empty/comment line"
             continue
         fi
         
         ((tested_count++))
-        
-        # Parse different proxy formats (support subnet notation)
+        log "[DEBUG] validate_proxy_list: Processing proxy #$tested_count"
         local expected_ip port username password
         
         if [[ "$proxy_line" =~ ^([^:]+):([^@]+)@([^:/]+)(/[0-9]+)?:([0-9]+)$ ]]; then
