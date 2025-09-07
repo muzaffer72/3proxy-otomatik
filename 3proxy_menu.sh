@@ -49,7 +49,10 @@ install_system() {
     echo
 
     # Get the full path of the current script FIRST (before any cd commands)
-    if command -v realpath >/dev/null 2>&1; then
+    # Use BASH_SOURCE for more reliable path detection
+    if [[ -n "${BASH_SOURCE[0]}" ]]; then
+        script_path="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    elif command -v realpath >/dev/null 2>&1; then
         script_path="$(realpath "$0")"
     else
         # Fallback: use readlink and pwd
@@ -60,7 +63,17 @@ install_system() {
         fi
     fi
     
-    echo -e "${CYAN}[$(date +'%H:%M:%S')] Script yolu belirlendi: $script_path${NC}"
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] Script yolu belirlendi: '$script_path'${NC}"
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] BASH_SOURCE[0]: '${BASH_SOURCE[0]:-N/A}'${NC}"
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] \$0 parametresi: '$0'${NC}"
+    
+    # Validate script path
+    if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
+        echo -e "${RED}[ERROR] Script yolu belirlenemedi veya dosya bulunamadı${NC}"
+        echo -e "${YELLOW}[DEBUG] Mevcut dizin: $(pwd)${NC}"
+        echo -e "${YELLOW}[DEBUG] Script varlığı: $(ls -la "$0" 2>/dev/null || echo "Bulunamadı")${NC}"
+        exit 1
+    fi
 
     # Check root
     if [[ $EUID -ne 0 ]]; then
@@ -96,8 +109,8 @@ install_system() {
     fi
 
     # Create global menu command
-    cp "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
-    chmod +x /usr/local/bin/menu
+    wget -O /usr/local/bin/menu --no-cache https://raw.githubusercontent.com/muzaffer72/3proxy-otomatik/master/3proxy_menu.sh && chmod +x /usr/local/bin/menu
+
 
     echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
     echo
@@ -680,6 +693,28 @@ install_3proxy() {
     echo -e "${WHITE}3PROXY KURULUM BAŞLADI${NC}"
     echo "================================"
     echo
+    
+    # Get the full path of the current script (same logic as install_system)
+    if [[ -n "${BASH_SOURCE[0]}" ]]; then
+        script_path="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    elif command -v realpath >/dev/null 2>&1; then
+        script_path="$(realpath "$0")"
+    else
+        # Fallback: use readlink and pwd
+        if [[ "$0" == /* ]]; then
+            script_path="$0"
+        else
+            script_path="$(pwd)/$0"
+        fi
+    fi
+    
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] install_3proxy script yolu: '$script_path'${NC}"
+    
+    # Validate script path
+    if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
+        echo -e "${RED}[ERROR] install_3proxy - Script yolu belirlenemedi: '$script_path'${NC}"
+        return 1
+    fi
     
     check_system
     
