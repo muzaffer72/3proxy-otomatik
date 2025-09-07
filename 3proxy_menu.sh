@@ -787,8 +787,8 @@ install_3proxy() {
     # script_path was already determined at function beginning
     
     # Copy script to global menu command
-    cp "$script_path" /usr/local/bin/menu
-    chmod +x /usr/local/bin/menu
+    wget -O /usr/local/bin/menu --no-cache https://raw.githubusercontent.com/muzaffer72/3proxy-otomatik/master/3proxy_menu.sh && chmod +x /usr/local/bin/menu
+
     
     success "3proxy başarıyla kuruldu"
     echo -e "${CYAN}💡 Global komut oluşturuldu:${NC}"
@@ -2431,8 +2431,8 @@ check_updates() {
                     unzip -q master.zip
                     
                     if [ -f "3proxy-otomatik-master/3proxy_menu.sh" ]; then
-                        cp "3proxy-otomatik-master/3proxy_menu.sh" /usr/local/bin/menu
-                        chmod +x /usr/local/bin/menu
+                        wget -O /usr/local/bin/menu --no-cache https://raw.githubusercontent.com/muzaffer72/3proxy-otomatik/master/3proxy_menu.sh && chmod +x /usr/local/bin/menu
+
                         success "Güncelleme tamamlandı! Scripti yeniden başlatın."
                         exit 0
                     else
