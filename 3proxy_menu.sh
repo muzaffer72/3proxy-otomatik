@@ -95,17 +95,9 @@ install_system() {
         return 1
     fi
 
-    # Create global commands with proper permissions
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy-manager
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/3proxy
-    ln -sf "$install_dir/3proxy_menu.sh" /usr/local/bin/proxy-menu
-    
-    # Ensure symlinks are executable
-    chmod +x /usr/local/bin/menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
-    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
+    # Create global menu command
+    cp "$install_dir/3proxy_menu.sh" /usr/local/bin/menu
+    chmod +x /usr/local/bin/menu
 
     echo -e "${GREEN}✅ 3proxy Elite Manager başarıyla yüklendi!${NC}"
     echo
@@ -113,11 +105,8 @@ install_system() {
     echo -e "   ${WHITE}which menu${NC} - Komut konumunu kontrol et"
     echo -e "   ${WHITE}ls -la /usr/local/bin/menu${NC} - Dosya izinlerini kontrol et"
     echo
-    echo -e "${GREEN}🚀 Global Komutlar:${NC}"
-    echo -e "   ${BLUE}sudo menu${NC}               # Kısa komut (herhangi bir yerden)"
-    echo -e "   ${BLUE}sudo 3proxy${NC}             # Ana komut"
-    echo -e "   ${BLUE}sudo proxy-menu${NC}         # Alternatif komut"
-    echo -e "   ${BLUE}sudo 3proxy-manager${NC}     # Tam komut"
+    echo -e "${GREEN}🚀 Global Komut:${NC}"
+    echo -e "   ${BLUE}sudo menu${NC}               # Ana menü komutu (herhangi bir yerden)"
     echo
     echo -e "${YELLOW}📋 Özellikler:${NC}"
     echo -e "   ✅ Ubuntu 20.04+ uyumluluğu"
@@ -759,30 +748,16 @@ install_3proxy() {
     # Set permissions
     chown -R proxy:proxy /usr/local/3proxy /var/run/3proxy
     
-    # Create global menu commands
-    current_script_path=$(realpath "$0")
+    # Create global menu command (use script_path from function start)
+    # script_path was already determined at function beginning
     
-    # Ensure script is executable
-    chmod +x "$current_script_path"
-    
-    # Create symlinks with proper permissions
-    ln -sf "$current_script_path" /usr/local/bin/menu 2>/dev/null || true
-    ln -sf "$current_script_path" /usr/local/bin/3proxy 2>/dev/null || true  
-    ln -sf "$current_script_path" /usr/local/bin/proxy-menu 2>/dev/null || true
-    ln -sf "$current_script_path" /usr/local/bin/3proxy-manager 2>/dev/null || true
-    
-    # Make symlinks executable
-    chmod +x /usr/local/bin/menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy 2>/dev/null || true
-    chmod +x /usr/local/bin/proxy-menu 2>/dev/null || true
-    chmod +x /usr/local/bin/3proxy-manager 2>/dev/null || true
+    # Copy script to global menu command
+    cp "$script_path" /usr/local/bin/menu
+    chmod +x /usr/local/bin/menu
     
     success "3proxy başarıyla kuruldu"
-    echo -e "${CYAN}💡 Global komutlar oluşturuldu:${NC}"
+    echo -e "${CYAN}💡 Global komut oluşturuldu:${NC}"
     echo -e "   ${BLUE}menu${NC} - Herhangi bir yerden menüyü aç"
-    echo -e "   ${BLUE}3proxy${NC} - Ana komut"
-    echo -e "   ${BLUE}proxy-menu${NC} - Alternatif komut"
-    echo -e "   ${BLUE}3proxy-manager${NC} - Manager komutu"
     echo
     read -p "Press Enter to continue..."
 }
