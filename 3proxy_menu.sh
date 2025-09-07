@@ -194,11 +194,11 @@ test_proxy() {
         if [ "$origin_ip" = "$expected_ip" ]; then
             return 0  # Başarılı
         else
-            echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
+            # echo "IP Mismatch: Expected $expected_ip, Got $origin_ip" >&2
             return 1
         fi
     else
-        echo "Connection failed (curl exit: $curl_exit_code)" >&2
+        # echo "Connection failed (curl exit: $curl_exit_code)" >&2
         return 1
     fi
 }
