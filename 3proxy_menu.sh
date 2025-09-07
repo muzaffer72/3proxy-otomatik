@@ -247,14 +247,20 @@ show_proxy_content() {
     echo -e " Mevcut Proxy Listesi"
     echo -e "==================================${NC}\n"
     
-    if [ -f "$PROXY_LIST_FILE" ] && [ -s "$PROXY_LIST_FILE" ]; then
-        echo -e "${CYAN}Proxy Listesi Dosyası: ${WHITE}$PROXY_LIST_FILE${NC}\n"
-        echo -e "${CYAN}İçerik:${NC}\n"
-        echo -e "${WHITE}$(cat "$PROXY_LIST_FILE")${NC}\n"
+    # En son oluşturulmuş proxy_list_fixed dosyasını bul
+    latest_proxy_file=""
+    if ls "${DATA_DIR}"/proxy_list_fixed_*.txt >/dev/null 2>&1; then
+        latest_proxy_file=$(ls -t "${DATA_DIR}"/proxy_list_fixed_*.txt | head -1)
+    fi
+    
+    if [ -n "$latest_proxy_file" ] && [ -f "$latest_proxy_file" ] && [ -s "$latest_proxy_file" ]; then
+        echo -e "${CYAN}Proxy Listesi (Kullanıma Hazır Format):${NC}\n"
+        echo -e "${WHITE}$(cat "$latest_proxy_file")${NC}\n"
         
         # Proxy sayısını göster
-        local proxy_count=$(wc -l < "$PROXY_LIST_FILE" 2>/dev/null || echo "0")
-        echo -e "${YELLOW}Toplam Proxy Sayısı: $proxy_count${NC}\n"
+        local proxy_count=$(wc -l < "$latest_proxy_file" 2>/dev/null || echo "0")
+        echo -e "${YELLOW}Toplam Proxy Sayısı: $proxy_count${NC}"
+        echo -e "${YELLOW}Dosya: $(basename "$latest_proxy_file")${NC}\n"
         
         # Servis durumu
         if systemctl is-active --quiet 3proxy; then
@@ -262,10 +268,12 @@ show_proxy_content() {
         else
             echo -e "${RED}✗ 3proxy servisi durmuş${NC}"
         fi
+        
+        echo -e "\n${CYAN}Bu listeyi proxy uygulamalarında kullanabilirsiniz${NC}"
     else
-        echo -e "${RED}Proxy listesi bulunamadı veya boş${NC}"
-        echo -e "${YELLOW}Dosya: $PROXY_LIST_FILE${NC}"
+        echo -e "${RED}Hazır proxy listesi bulunamadı${NC}"
         echo -e "${YELLOW}Önce 'Sabit (Fixed) Proxy Modu' ile proxy listesi oluşturun${NC}"
+        echo -e "${CYAN}Fixed mode kullanıcıadı:şifre@ip:port formatında liste üretir${NC}"
     fi
     
     echo -e "\n${CYAN}Ana menüye dönmek için herhangi bir tuşa basın...${NC}"
@@ -3062,10 +3070,10 @@ show_main_menu() {
     echo
     
     echo -e "${CYAN} 1.${NC} İlk Kurulum (3proxy ve bağımlılıklar)"
-    echo -e "${CYAN} 2.${NC} Mevcut Proxy Listesini Göster"
-    echo -e "${CYAN} 3.${NC} Proxy Listesini Sil"
+    echo -e "${CYAN} 2.${NC} Proxy Adreslerini Oluştur (Sabit Mod)"
+    echo -e "${CYAN} 3.${NC} Mevcut Proxy Listesini Göster"
+    echo -e "${CYAN} 4.${NC} Proxy Listesini Sil"
     # echo -e "${CYAN} 4.${NC} Rastgele Mod Proxy Oluştur"           # GİZLENDİ
-    echo -e "${CYAN} 5.${NC} Sabit Mod Proxy Oluştur"
     # echo -e "${CYAN} 6.${NC} Public Mod Proxy Oluştur"             # GİZLENDİ  
     # echo -e "${CYAN} 7.${NC} Maksimum Proxy Modu"                   # GİZLENDİ
     echo -e "${CYAN} 8.${NC} Proxy'leri Başlat"
@@ -3100,10 +3108,10 @@ main() {
         
         case $choice in
             1) install_3proxy ;;
-            2) show_proxy_content ;;
-            3) delete_proxy_list ;;
-            4) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
-            5) create_proxy_fixed ;;
+            2) create_proxy_fixed ;;
+            3) show_proxy_content ;;
+            4) delete_proxy_list ;;
+            5) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             6) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             7) echo -e "${YELLOW}Bu özellik şu anda devre dışı${NC}"; sleep 2 ;;
             8) start_proxies ;;
